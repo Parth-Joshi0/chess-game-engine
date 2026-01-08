@@ -1,4 +1,5 @@
 from piece import *
+from collections import defaultdict
 
 class Move:
     def __init__(self, oldPos, newPos, piece, piece2=None, typeOfMove=0):
@@ -25,6 +26,7 @@ class Board:
 
         self.turn = 0
         self.moveRuleTurns = 0
+
         self.boardList = self.boardList = [[None for _ in range(8)] for _ in range(8)]
 
         self.enPassantTarget = None
@@ -33,6 +35,9 @@ class Board:
         self.promotionSquare = None
 
         self.generate_board()
+
+        self.position_counts = defaultdict(int)
+        self.position_counts[self.position_key()] = 1
 
     def generate_board(self):
         WHITE = True
@@ -311,6 +316,7 @@ class Board:
             piece.move(x2, y2)
             self.turn += 1
             self.moveRuleTurns = 0
+        self.position_counts[self.position_key()] += 1
         return "VALID_MOVE"
 
     def is_square_attacked(self, x: int, y: int, by_colour: bool) -> bool:
@@ -419,10 +425,13 @@ class Board:
         del move._temp_captured
         del move._temp_old_pos
 
-    def game_end(self) -> int: #0 for game not ended, 1 for checkmate, 2 for stalemate, 3 for 50 move rule draw
+    def game_end(self) -> int: #0 for game not ended, 1 for checkmate, 2 for stalemate, 3 for 50 move rule draw, 4 for 3fold repetion
         colour = True if self.turn % 2 == 0 else False
         pieces = self.whitePieces if colour else self.blackPieces
         king = self.whiteKing if colour else self.blackKing
+
+        if self.position_counts[self.position_key()] >= 3:
+            return 4
 
         if self.moveRuleTurns >= 50:
             return 3
@@ -477,3 +486,39 @@ class Board:
                 self.whitePieces.remove(piece2)
 
         self.turn += 1
+        self.position_counts[self.position_key()] += 1
+
+    def position_key(self) -> str:
+        #Stores the position in a bit key, the first bit is the side to move,
+        #The next 4 bits are the castling rights, (white king, white queen, black king, black queen)
+        #The next 8 bits are the target square for en-passant (x, y) - all 1's if it is none
+        #The next 256 bits are the pieces, each mapped to a seperate code, where the first bit is the colour
+
+        MAPPING = {
+            "king": "110", "knight": "101", "queen": "100", "bishop": "011", "rook": "010", "pawn": "001"
+        }
+        key = "1" if self.turn%2==0 else "0"
+
+        rooks = [self.boardList[7][0], self.boardList[7][7], self.boardList[0][0], self.boardList[0][7]]
+
+        for i, rook in enumerate(rooks):
+            if rook and rook.name == "rook":
+                king = self.whiteKing if rook.colour else self.blackKing
+                if not rook.hasMoved and not king.hasMoved:
+                    key += "1"
+                else:
+                    key += "1"
+            else:
+                key += "0"
+
+        key += (str(format(self.enPassantTarget[0], "04b")) + str(format(self.enPassantTarget[0], "04b"))) if self.enPassantTarget else "11111111"
+
+        for y in range(8):
+            for x in range(8):
+                p = self.boardList[y][x]
+                if p is None:
+                    key += "0000"
+                else:
+                    key += ("1" if p.colour else "0") + MAPPING[p.name]
+        print(key)
+        return key

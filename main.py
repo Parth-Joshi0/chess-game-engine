@@ -18,7 +18,7 @@ UNICODE = {
     "bK": "♚", "bQ": "♛", "bR": "♜", "bB": "♝", "bN": "♞", "bP": "♟",
 }
 GAME_END_STATE = {
-    1: "Checkmate!", 2: "Stalemate!", 3: "Draw by 50 move rule"
+    1: "Checkmate!", 2: "Stalemate!", 3: "Draw by 50 move rule", 4: "Draw by 3 fold repetition"
 }
 
 class Square:
