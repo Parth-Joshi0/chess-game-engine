@@ -147,7 +147,7 @@ class Game:
         else:
             # failed: either keep selection, or switch selection to clicked piece
             clicked_piece = self.board.boardList[y][x]
-            if clicked_piece is not None:
+            if clicked_piece is not None and clicked_piece.colour is piece.colour:
                 self.selected_from = to_pos
                 self.selected = sq
             # else keep current selection (do nothing)
