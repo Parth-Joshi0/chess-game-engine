@@ -42,8 +42,13 @@ class Game:
 
         self.game_over = False
         self.game_over_text = ""
+
         self.big_font = pygame.font.SysFont("arialunicode", 48)
         self.small_font = pygame.font.SysFont("arialunicode", 28)
+
+        self.promotion_pending_ui = False
+        self.promotion_choices = ["Q", "R", "B", "N"]
+        self.promotion_rects = {}
 
     def run(self):
         while self.running:
@@ -59,6 +64,18 @@ class Game:
             if event.type == pygame.QUIT:
                 self.running = False
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if self.promotion_pending_ui:
+                    choice = self.get_promotion_choice_from_click(pygame.mouse.get_pos())
+                    if choice:
+                        self.board.finalize_promotion(choice)
+                        self.promotion_pending_ui = False
+                        game_status = self.board.game_end()
+                        if game_status != 0:
+                            self.game_over = True
+                            self.game_over_text = "Checkmate!" if game_status == 1 else "Stalemate!"
+                        return
+                    return
+
                 sq = self.mouse_to_square(pygame.mouse.get_pos())
                 if sq:
                     self.on_click_square(sq)
@@ -113,13 +130,17 @@ class Game:
         attempted = Move(from_pos, to_pos, piece)
         moved = self.board.move(attempted)
 
-        if moved:
+        if moved == "VALID_MOVE":
             # success: clear selection
             self.selected_from = None
             self.selected = None
             if (self.board.game_end() != 0):
                 self.game_over = True
                 self.game_over_text = "Checkmate!" if self.board.game_end() == 1 else "Stalemate!"
+        elif moved == "PROMOTION":
+            self.promotion_pending_ui = True
+            self.selected = None
+            self.selected_from = None
         else:
             # failed: either keep selection, or switch selection to clicked piece
             clicked_piece = self.board.boardList[y][x]
@@ -128,9 +149,17 @@ class Game:
                 self.selected = sq
             # else keep current selection (do nothing)
 
+    def get_promotion_choice_from_click(self, mouse_pos):
+        for choice, rect in self.promotion_rects.items():
+            if rect.collidepoint(mouse_pos):
+                return choice
+        return None
+
     # ---------- Rendering ----------
     def render(self):
         self.draw_board()
+        if self.promotion_pending_ui:
+            self.draw_promotion_overlay()
         self.draw_selection()
         self.draw_pieces()
         if self.game_over:
@@ -219,6 +248,32 @@ class Game:
         self.screen.blit(title, title_rect)
         self.screen.blit(hint, hint_rect)
 
+    def draw_promotion_overlay(self):
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 140))
+        self.screen.blit(overlay, (0, 0))
+
+        # buttons
+        w, h = 140, 60
+        gap = 20
+        total_w = 4 * w + 3 * gap
+        start_x = (WIDTH - total_w) // 2
+        y = (HEIGHT - h) // 2
+
+        self.promotion_rects = {}
+        for i, choice in enumerate(self.promotion_choices):
+            rect = pygame.Rect(start_x + i * (w + gap), y, w, h)
+            self.promotion_rects[choice] = rect
+            pygame.draw.rect(self.screen, (240, 240, 240), rect, border_radius=8)
+            pygame.draw.rect(self.screen, (30, 30, 30), rect, 2, border_radius=8)
+
+            label = UNICODE["b" + choice]
+            img = self.font.render(label, True, (0, 0, 0))
+            self.screen.blit(img, img.get_rect(center=rect.center))
+
+        # optional instruction text
+        msg = self.small_font.render("Choose promotion:", True, (255, 255, 255))
+        self.screen.blit(msg, (start_x, y - 40))
 
 if __name__ == '__main__':
     Game().run()

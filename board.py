@@ -1,4 +1,5 @@
 from piece import *
+
 class Move:
     def __init__(self, oldPos, newPos, piece, piece2=None, typeOfMove=0):
         self.oldPos = oldPos
@@ -27,7 +28,11 @@ class Board:
 
         self.blackCastle = True
         self.whiteCastle = True
+
         self.enPassantTarget = None
+
+        self.promotionPiece = None
+        self.promotionSquare = None
 
         self.generate_board()
 
@@ -217,7 +222,9 @@ class Board:
 
         return moves
 
-    def move(self, move: Move) -> bool:
+    def move(self, move: Move) -> str:
+        self.promotionPiece = None
+
         legal_moves = self.get_legal_moves_by_piece((move.piece))
 
         found = False
@@ -228,7 +235,7 @@ class Board:
                 break
 
         if not found:
-            return False
+            return "ILLEGAL_MOVE"
 
         x1, y1 = move.oldPos
         x2, y2 = move.newPos
@@ -259,7 +266,7 @@ class Board:
             rook = self.boardList[ry1][rx1]
             self.boardList[ry1][rx1] = None
             self.boardList[ry2][rx2] = rook
-            rook.move(ry2, ry1)
+            rook.move(rx2, ry2)
 
             self.turn += 1
 
@@ -279,6 +286,11 @@ class Board:
             piece.move(x2, y2)
             self.turn += 1
 
+        elif move.typeOfMove == 3: #Promotion
+            self.promotionPiece = self.boardList[y1][x1]
+            self.promotionSquare = (x2, y2)
+            return "PROMOTION"
+
         elif move.typeOfMove == 4: #Capture
             piece = self.boardList[y1][x1]
             self.boardList[y1][x1] = None
@@ -293,14 +305,14 @@ class Board:
             self.boardList[y2][x2] = piece
             piece.move(x2, y2)
             self.turn += 1
-        return True
+        return "VALID_MOVE"
 
     def is_square_attacked(self, x: int, y: int, by_colour: bool) -> bool:
         def in_bounds(cx, cy):
             return 0 <= cx <= 7 and 0 <= cy <= 7
 
         #Pawn attacks
-        pawn_dir = -1 if by_colour else 1
+        pawn_dir = 1 if by_colour else -1
         for dx in (-1, 1):
             ax, ay = x + dx, y + pawn_dir
             if in_bounds(ax, ay):
@@ -414,3 +426,45 @@ class Board:
             return 1
 
         return 2
+
+    def finalize_promotion(self, choice):
+        piece = None
+        colour = self.promotionPiece.colour
+        x1, y1 = self.promotionPiece.pos
+        x2, y2 = self.promotionSquare
+
+        match choice:
+            case "Q":
+                piece = Queen(colour, x2, y2)
+            case "N":
+                piece = Knight(colour, x2, y2)
+            case "B":
+                piece = Bishop(colour, x2, y2)
+            case "R":
+                piece = Rook(colour, x2, y2)
+
+        if self.boardList[y2][x2] is None:
+            self.boardList[y2][x2] = piece
+            self.boardList[y1][x1] = None
+
+            if piece.colour:
+                self.whitePieces.remove(self.promotionPiece)
+                self.whitePieces.append(piece)
+            else:
+                self.blackPieces.remove(self.promotionPiece)
+                self.blackPieces.append(piece)
+        else:
+            piece2 = self.boardList[y2][x2]
+            self.boardList[y2][x2] = piece
+            self.boardList[y1][x1] = None
+
+            if piece.colour:
+                self.whitePieces.remove(self.promotionPiece)
+                self.whitePieces.append(piece)
+                self.blackPieces.remove(piece2)
+            else:
+                self.blackPieces.remove(self.promotionPiece)
+                self.blackPieces.append(piece)
+                self.whitePieces.remove(piece2)
+
+        self.turn += 1
