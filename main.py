@@ -163,7 +163,7 @@ class Game:
         for move in moves:
             x, y = move.newPos[0], move.newPos[1]
             rect = pygame.Rect(x * SQ_SIZE, y * SQ_SIZE, SQ_SIZE, SQ_SIZE)
-            if move.typeOfMove == 4:
+            if move.typeOfMove == 4 or move.typeOfMove == 2:
                 pygame.draw.rect(self.screen, CAPTURE_HIGHLIGHT, rect, 4)
             else:
                 pygame.draw.rect(self.screen, MOVE_HIGHLIGHT, rect, 4)

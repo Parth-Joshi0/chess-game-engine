@@ -6,8 +6,8 @@ class Move:
         self.piece = piece
         self.piece2 = piece2
         self.typeOfMove = typeOfMove #0 for regular moving move, 1 for castling, 2 for enPassant, 3 for Promotion, 4 for capture
-        self.rookOldPos = (-1,-1)
-        self.rookNewPos = (-1,-1)
+        self.piece2OldPos = (-1,-1)
+        self.piece2NewPos = (-1,-1)
 
     def __eq__(self, other):
         if self.piece == other.piece and self.oldPos == other.oldPos and self.newPos == other.newPos:
@@ -27,6 +27,7 @@ class Board:
 
         self.blackCastle = True
         self.whiteCastle = True
+        self.enPassantTarget = None
 
         self.generate_board()
 
@@ -111,17 +112,17 @@ class Board:
         start_row = 6 if piece.colour else 1
         promotion_row = 0 if piece.colour else 7
 
-        # --- 1 square forward ---
+        #1 square forward
         y1 = y + direction
         if 0 <= y1 <= 7 and self.boardList[y1][x] is None:
             moves.append(Move((x, y), (x, y1), piece))
 
-            # --- 2 squares forward (only if first move & path empty) ---
+            #2 squares forward
             y2 = y + 2 * direction
             if y == start_row and self.boardList[y2][x] is None:
                 moves.append(Move((x, y), (x, y2), piece))
 
-        # --- captures ---
+        #captures
         for dx in (-1, 1):
             x2 = x + dx
             y2 = y + direction
@@ -130,10 +131,20 @@ class Board:
                 if target is not None and target.colour != piece.colour:
                     moves.append(Move((x, y), (x2, y2), piece, piece2=target, typeOfMove=4))
 
-        # --- promotion flag (optional now) ---
+        #promotion flag
         for m in moves:
             if m.newPos[1] == promotion_row:
                 m.typeOfMove = 3  # promotion
+
+        # en Passant
+        if self.enPassantTarget is not None:
+            tx, ty = self.enPassantTarget
+            pawn = self.boardList[ty-direction][tx]
+            if ty == piece.pos[1] + direction and abs(tx - piece.pos[0]) == 1:
+                if pawn and pawn.colour != piece.colour and pawn.name == "pawn":
+                    m = Move(piece.pos, (tx, ty), piece, piece2=pawn, typeOfMove=2)
+                    m.piece2OldPos = (tx, ty-direction)
+                    moves.append(m)
 
         return moves
 
@@ -191,8 +202,8 @@ class Board:
             attacked = self.is_square_attacked(4, row, not piece.colour) or self.is_square_attacked(2, row, not piece.colour) or self.is_square_attacked(3, row, not piece.colour)
             if empty and not attacked:
                 move = Move(king.pos, (2, row), king, rook1, 1)
-                move.rookNewPos = (3, row)
-                move.rookOldPos = rook1.pos
+                move.piece2NewPos = (3, row)
+                move.piece2OldPos = rook1.pos
                 moves.append(move)
 
         if rook2 and rook2.name == "rook" and not rook2.hasMoved:
@@ -200,8 +211,8 @@ class Board:
             attacked = self.is_square_attacked(5, row, not piece.colour) or self.is_square_attacked(6, row, not piece.colour) or self.is_square_attacked(4, row, not piece.colour)
             if empty and not attacked:
                 move = Move(king.pos, (6, row), king, rook2, 1)
-                move.rookNewPos = (5, row)
-                move.rookOldPos = rook2.pos
+                move.piece2NewPos = (5, row)
+                move.piece2OldPos = rook2.pos
                 moves.append(move)
 
         return moves
@@ -222,6 +233,8 @@ class Board:
         x1, y1 = move.oldPos
         x2, y2 = move.newPos
 
+        self.enPassantTarget = None
+
         if move.typeOfMove == 0:
             piece = self.boardList[y1][x1]
             self.boardList[y1][x1] = None
@@ -229,14 +242,19 @@ class Board:
             self.boardList[y2][x2] = piece
             piece.move(x2,y2)
             self.turn += 1
+
+            if move.piece.name == "pawn" and abs(y2 - y1) == 2:
+                passed_y = (y1 + y2) // 2
+                self.enPassantTarget = (x1, passed_y)
+
         elif move.typeOfMove == 1: #Castle
             king = self.boardList[y1][x1]
             self.boardList[y1][x1] = None
             self.boardList[y2][x2] = king
             king.move(x2, y2)
 
-            rx1, ry1 = move.rookOldPos
-            rx2, ry2 = move.rookNewPos
+            rx1, ry1 = move.piece2OldPos
+            rx2, ry2 = move.piece2NewPos
 
             rook = self.boardList[ry1][rx1]
             self.boardList[ry1][rx1] = None
@@ -244,6 +262,23 @@ class Board:
             rook.move(ry2, ry1)
 
             self.turn += 1
+
+        elif move.typeOfMove == 2: #en-passant
+            piece = self.boardList[y1][x1]
+            self.boardList[y1][x1] = None
+
+            px1, py1 = move.piece2OldPos
+            self.boardList[py1][px1] = None
+
+            if move.piece2.colour:
+                self.whitePieces.remove(move.piece2)
+            else:
+                self.blackPieces.remove(move.piece2)
+
+            self.boardList[y2][x2] = piece
+            piece.move(x2, y2)
+            self.turn += 1
+
         elif move.typeOfMove == 4: #Capture
             piece = self.boardList[y1][x1]
             self.boardList[y1][x1] = None
