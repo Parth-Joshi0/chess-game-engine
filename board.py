@@ -24,6 +24,7 @@ class Board:
         self.blackKing = None
 
         self.turn = 0
+        self.moveRuleTurns = 0
         self.boardList = self.boardList = [[None for _ in range(8)] for _ in range(8)]
 
         self.blackCastle = True
@@ -250,6 +251,11 @@ class Board:
             piece.move(x2,y2)
             self.turn += 1
 
+            if move.piece.name == "pawn":
+                self.moveRuleTurns = 0
+            else:
+                self.moveRuleTurns += 1
+
             if move.piece.name == "pawn" and abs(y2 - y1) == 2:
                 passed_y = (y1 + y2) // 2
                 self.enPassantTarget = (x1, passed_y)
@@ -285,10 +291,12 @@ class Board:
             self.boardList[y2][x2] = piece
             piece.move(x2, y2)
             self.turn += 1
+            self.moveRuleTurns = 0
 
         elif move.typeOfMove == 3: #Promotion
             self.promotionPiece = self.boardList[y1][x1]
             self.promotionSquare = (x2, y2)
+            self.moveRuleTurns = 0
             return "PROMOTION"
 
         elif move.typeOfMove == 4: #Capture
@@ -305,6 +313,7 @@ class Board:
             self.boardList[y2][x2] = piece
             piece.move(x2, y2)
             self.turn += 1
+            self.moveRuleTurns = 0
         return "VALID_MOVE"
 
     def is_square_attacked(self, x: int, y: int, by_colour: bool) -> bool:
@@ -413,16 +422,19 @@ class Board:
         del move._temp_captured
         del move._temp_old_pos
 
-    def game_end(self) -> int: #0 for game not ended, 1 for checkmate, 2 for stalemate
+    def game_end(self) -> int: #0 for game not ended, 1 for checkmate, 2 for stalemate, 3 for 50 move rule draw
         colour = True if self.turn % 2 == 0 else False
         pieces = self.whitePieces if colour else self.blackPieces
         king = self.whiteKing if colour else self.blackKing
 
+        if self.moveRuleTurns >= 50:
+            return 3
+
         for piece in pieces:
-            if (len(self.get_legal_moves_by_piece(piece)) != 0):
+            if len(self.get_legal_moves_by_piece(piece)) != 0:
                 return 0
 
-        if (self.is_square_attacked(king.pos[0], king.pos[1], not colour)):
+        if self.is_square_attacked(king.pos[0], king.pos[1], not colour):
             return 1
 
         return 2

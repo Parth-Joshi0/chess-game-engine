@@ -17,6 +17,9 @@ UNICODE = {
     "wK": "♔", "wQ": "♕", "wR": "♖", "wB": "♗", "wN": "♘", "wP": "♙",
     "bK": "♚", "bQ": "♛", "bR": "♜", "bB": "♝", "bN": "♞", "bP": "♟",
 }
+GAME_END_STATE = {
+    1: "Checkmate!", 2: "Stalemate!", 3: "Draw by 50 move rule"
+}
 
 class Square:
     def __init__(self, row, col):
@@ -72,7 +75,7 @@ class Game:
                         game_status = self.board.game_end()
                         if game_status != 0:
                             self.game_over = True
-                            self.game_over_text = "Checkmate!" if game_status == 1 else "Stalemate!"
+                            self.game_over_text = GAME_END_STATE[game_status]
                         return
                     return
 
