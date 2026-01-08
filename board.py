@@ -27,9 +27,6 @@ class Board:
         self.moveRuleTurns = 0
         self.boardList = self.boardList = [[None for _ in range(8)] for _ in range(8)]
 
-        self.blackCastle = True
-        self.whiteCastle = True
-
         self.enPassantTarget = None
 
         self.promotionPiece = None
