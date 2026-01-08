@@ -6,6 +6,8 @@ class Move:
         self.piece = piece
         self.piece2 = piece2
         self.typeOfMove = typeOfMove #0 for regular moving move, 1 for castling, 2 for enPassant, 3 for Promotion, 4 for capture
+        self.rookOldPos = (-1,-1)
+        self.rookNewPos = (-1,-1)
 
     def __eq__(self, other):
         if self.piece == other.piece and self.oldPos == other.oldPos and self.newPos == other.newPos:
@@ -175,29 +177,87 @@ class Board:
         return legals
 
     def castling_moves(self, piece: Piece) -> list[Move]:
-        return []
+        king = self.whiteKing if piece.colour else self.blackKing
+        row = 7 if piece.colour else 0
+        if king.hasMoved:
+            return []
+
+        rook1 = self.boardList[row][0]
+        rook2 = self.boardList[row][7]
+
+        moves = []
+        if rook1 and rook1.name == "rook" and not rook1.hasMoved:
+            empty = self.boardList[row][1] is None and self.boardList[row][2] is None and self.boardList[row][3] is None
+            attacked = self.is_square_attacked(4, row, not piece.colour) or self.is_square_attacked(2, row, not piece.colour) or self.is_square_attacked(3, row, not piece.colour)
+            if empty and not attacked:
+                move = Move(king.pos, (2, row), king, rook1, 1)
+                move.rookNewPos = (3, row)
+                move.rookOldPos = rook1.pos
+                moves.append(move)
+
+        if rook2 and rook2.name == "rook" and not rook2.hasMoved:
+            empty = self.boardList[row][5] is None and self.boardList[row][6] is None
+            attacked = self.is_square_attacked(5, row, not piece.colour) or self.is_square_attacked(6, row, not piece.colour) or self.is_square_attacked(4, row, not piece.colour)
+            if empty and not attacked:
+                move = Move(king.pos, (6, row), king, rook2, 1)
+                move.rookNewPos = (5, row)
+                move.rookOldPos = rook2.pos
+                moves.append(move)
+
+        return moves
 
     def move(self, move: Move) -> bool:
-        if not (move in self.get_legal_moves_by_piece((move.piece))):
+        legal_moves = self.get_legal_moves_by_piece((move.piece))
+
+        found = False
+        for m in legal_moves:
+            if m.oldPos == move.oldPos and m.newPos == move.newPos:
+                move = m
+                found = True
+                break
+
+        if not found:
             return False
 
-        x1 = move.oldPos[0]
-        y1 = move.oldPos[1]
-        x2 = move.newPos[0]
-        y2 = move.newPos[1]
-        piece = self.boardList[y1][x1]
-        self.boardList[y1][x1] = None
+        x1, y1 = move.oldPos
+        x2, y2 = move.newPos
 
-        target = self.boardList[y2][x2]
-        if target:
-            if target.colour:
-                self.whitePieces.remove(target)
-            else:
-                self.blackPieces.remove(target)
+        if move.typeOfMove == 0:
+            piece = self.boardList[y1][x1]
+            self.boardList[y1][x1] = None
 
-        self.boardList[y2][x2] = piece
-        piece.pos = (x2,y2)
-        self.turn += 1
+            self.boardList[y2][x2] = piece
+            piece.move(x2,y2)
+            self.turn += 1
+        elif move.typeOfMove == 1: #Castle
+            king = self.boardList[y1][x1]
+            self.boardList[y1][x1] = None
+            self.boardList[y2][x2] = king
+            king.move(x2, y2)
+
+            rx1, ry1 = move.rookOldPos
+            rx2, ry2 = move.rookNewPos
+
+            rook = self.boardList[ry1][rx1]
+            self.boardList[ry1][rx1] = None
+            self.boardList[ry2][rx2] = rook
+            rook.move(ry2, ry1)
+
+            self.turn += 1
+        elif move.typeOfMove == 4: #Capture
+            piece = self.boardList[y1][x1]
+            self.boardList[y1][x1] = None
+
+            target = self.boardList[y2][x2]
+            if target:
+                if target.colour:
+                    self.whitePieces.remove(target)
+                else:
+                    self.blackPieces.remove(target)
+
+            self.boardList[y2][x2] = piece
+            piece.move(x2, y2)
+            self.turn += 1
         return True
 
     def is_square_attacked(self, x: int, y: int, by_colour: bool) -> bool:

@@ -22,7 +22,7 @@ class King(Piece):
         for i in range(self.pos[0] - 1, self.pos[0] + 2):
             for j in range(self.pos[1] - 1, self.pos[1] + 2):
                 if 0 <= i <= 7 and 0 <= j <= 7:
-                    if i != self.pos[0] and j != self.pos[1]:
+                    if (i, j) != (self.pos[0], self.pos[1]):
                         moves.append((i, j))
 
         return moves
