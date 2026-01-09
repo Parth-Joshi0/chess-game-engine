@@ -522,3 +522,9 @@ class Board:
                     key += ("1" if p.colour else "0") + MAPPING[p.name]
         print(key)
         return key
+
+    def generate_legal_moves(self, colour: bool):
+        pieceList = self.whitePieces if colour else self.blackPieces
+        moves = []
+        for piece in pieceList:
+            moves += self.get_legal_moves_by_piece(piece)
