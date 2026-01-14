@@ -41,10 +41,13 @@ class SearchEngine:
     def negamax(self, board, depth, alpha, beta, ply):
         if depth == 0:
             return evaluate(board, False)
-        elif self.is_terminal(board):
-            return terminal_eval(board)
 
         childMoves = board.generate_legal_moves(board.turn%2==0)
+
+        state = board.game_end(childMoves)
+        if state != 0:
+            return terminal_eval(board, state)
+
         childMoves = self.order_moves(board, childMoves)
         value = -math.inf
 
@@ -56,12 +59,6 @@ class SearchEngine:
             if alpha >= beta:
                 break
         return value
-
-    def is_terminal(self, board: Board):
-        state = board.game_end()
-        if state == 0:
-            return False
-        return True
 
     def order_moves(self, board, moves):
 

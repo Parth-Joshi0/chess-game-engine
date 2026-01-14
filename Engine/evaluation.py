@@ -62,8 +62,7 @@ def evaluate(board: Board, debug: bool) -> int | tuple[int, EvalBreakdown]:
         return breakdown.total, breakdown
     return breakdown.total
 
-def terminal_eval(board):
-    state = board.game_end()
+def terminal_eval(board, state):
     if state != 1:
         return 0
     else:

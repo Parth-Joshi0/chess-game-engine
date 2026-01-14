@@ -532,7 +532,7 @@ class Board:
         del move._temp_old_pos
         del move._temp_hasMoved
 
-    def game_end(self) -> int: #0 for game not ended, 1 for checkmate, 2 for stalemate, 3 for 50 move rule draw, 4 for 3fold repetion
+    def game_end(self, moves=None) -> int: #0 for game not ended, 1 for checkmate, 2 for stalemate, 3 for 50 move rule draw, 4 for 3fold repetion
         colour = True if self.turn % 2 == 0 else False
         pieces = self.whitePieces if colour else self.blackPieces
         king = self.whiteKing if colour else self.blackKing
@@ -543,8 +543,12 @@ class Board:
         if self.moveRuleTurns >= 50:
             return 3
 
-        for piece in pieces:
-            if len(self.get_legal_moves_by_piece(piece)) != 0:
+        if moves is None:
+            for piece in pieces:
+                if len(self.get_legal_moves_by_piece(piece)) != 0:
+                    return 0
+        else:
+            if len(moves) != 0:
                 return 0
 
         if self.is_square_attacked(king.pos[0], king.pos[1], not colour):
