@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from board import Board
-import math
 
 WHITE = True
 BLACK = False
@@ -66,8 +65,8 @@ def evaluate(board: Board, debug: bool) -> int | tuple[int, EvalBreakdown]:
         return score, breakdown
     return score
 
-def terminal_eval(board, state):
+def terminal_eval(board, state, ply):
     if state != 1:
         return 0
     else:
-        return -math.inf if board.turn % 2 == 0 else math.inf
+        return -1000000000 + ply
