@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from Engine.evaluation import evaluate, terminal_eval
 from board import Board, Move
 import math
@@ -6,8 +8,11 @@ from piece import Piece
 class SearchEngine:
     def __init__(self, max_depth=4):
         self.max_depth = max_depth
+        self.transposition_table : dict[bytes, TranspositionTableEntry] = {}
+        self.nodes = 0
 
     def choose_move(self, board):
+        self.nodes = 0
         best_move = None
         best_value = -math.inf
 
@@ -38,7 +43,22 @@ class SearchEngine:
 
         return best_move
 
-    def negamax(self, board, depth, alpha, beta, ply):
+    def negamax(self, board: Board, depth, alpha, beta, ply):
+        alpha0 = alpha
+        key = board.position_key()
+
+        entry = self.transposition_table.get(key)
+
+        if entry is not None and entry.depth >= depth:
+            if entry.flag == "EXACT":
+                return entry.value
+            elif entry.flag == "LOWER":
+                alpha = max(alpha, entry.value)
+            elif entry.flag == "UPPER":
+                beta = min(beta, entry.value)
+            if alpha >= beta:
+                return entry.value
+
         if depth == 0:
             return self.quiescence_search(board, alpha, beta, ply)
 
@@ -52,12 +72,28 @@ class SearchEngine:
         value = -math.inf
 
         for move in childMoves:
+            self.nodes += 1
             board._apply_temp_move(move)
-            value = max(value, -self.negamax(board, depth - 1, -beta, -alpha, ply+1))
+            score = -self.negamax(board, depth - 1, -beta, -alpha, ply + 1)
             board._undo_temp_move(move)
+
+            if score > value:
+                value = score
+                best_move = move
+
             alpha = max(alpha, value)
             if alpha >= beta:
                 break
+
+        if value <= alpha0:
+            flag = "UPPER"
+        elif value >= beta:
+            flag = "LOWER"
+        else:
+            flag = "EXACT"
+
+        self.transposition_table[key] = TranspositionTableEntry(depth=depth, value=value, flag=flag, best_move=best_move)
+
         return value
 
     def order_moves(self, moves):
@@ -109,3 +145,10 @@ class SearchEngine:
                 alpha = score
 
         return alpha
+
+@dataclass
+class TranspositionTableEntry:
+    depth: int
+    value: int
+    flag: str # "EXACT", "LOWER", "UPPER"
+    best_move: object | None
