@@ -1,6 +1,7 @@
 from Engine.evaluation import evaluate, terminal_eval
-from board import Board
+from board import Board, Move
 import math
+from piece import Piece
 
 class SearchEngine:
     def __init__(self, max_depth=4):
@@ -63,4 +64,26 @@ class SearchEngine:
         return True
 
     def order_moves(self, board, moves):
-        return moves
+
+        def abs_worth(p: Piece):
+            return abs(p.piece_worth()) if p else 0
+
+        def score_moves(m: Move):
+            t = m.typeOfMove
+
+            attacker = abs_worth(m.piece)
+            victim_or_promo = abs_worth(m.piece2)
+
+            if t == 3: #promotion
+                return 10000000 + victim_or_promo
+
+            if t == 2 or t == 4:
+                mvv_lva = victim_or_promo * 10 - attacker
+                return 500000 + mvv_lva
+
+            if t == 1:
+                return 100000
+
+            return 0
+
+        return sorted(moves, key=score_moves, reverse=True)

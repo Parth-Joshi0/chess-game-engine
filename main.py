@@ -236,7 +236,6 @@ class Game:
         return prefix + letter
 
     def draw_game_over_popup(self):
-        print(self.game_over_text)
         # dark transparent overlay
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 160))  # last value = alpha
