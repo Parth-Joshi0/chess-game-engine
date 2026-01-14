@@ -1,4 +1,6 @@
 import pygame
+
+from Engine.search import SearchEngine
 from board import *
 from piece import *
 
@@ -52,6 +54,8 @@ class Game:
         self.promotion_pending_ui = False
         self.promotion_choices = ["Q", "R", "B", "N"]
         self.promotion_rects = {}
+
+        self.engine = SearchEngine()
 
     def run(self):
         while self.running:
@@ -137,6 +141,7 @@ class Game:
             # success: clear selection
             self.selected_from = None
             self.selected = None
+            print(self.engine.choose_move(self.board))
             if (self.board.game_end() != 0):
                 self.game_over = True
                 self.game_over_text = "Checkmate!" if self.board.game_end() == 1 else "Stalemate!"

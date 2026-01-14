@@ -1,6 +1,12 @@
 from piece import *
 from collections import defaultdict
 
+def num_to_chess_notation(pos):
+    x, y = pos
+    file_letter = chr(ord('a') + x)
+    rank_number = 8 - y
+    return f"{file_letter}{rank_number}"
+
 class Move:
     def __init__(self, oldPos, newPos, piece, piece2=None, typeOfMove=0):
         self.oldPos = oldPos
@@ -15,6 +21,9 @@ class Move:
         if self.piece == other.piece and self.oldPos == other.oldPos and self.newPos == other.newPos:
             return True
         return False
+
+    def __str__(self):
+        return f"Piece: ({self.piece.colour} {self.piece.name}), From: {num_to_chess_notation(self.oldPos)}, To: {num_to_chess_notation(self.newPos)}"
 
 class Board:
     def __init__(self):
@@ -615,3 +624,4 @@ class Board:
         moves = []
         for piece in pieceList:
             moves += self.get_legal_moves_by_piece(piece)
+        return moves
