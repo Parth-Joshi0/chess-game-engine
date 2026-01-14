@@ -57,10 +57,14 @@ def evaluate(board: Board, debug: bool) -> int | tuple[int, EvalBreakdown]:
                 breakdown.king += KING_CASTLED_BONUS if piece.colour else -KING_CASTLED_BONUS
             else:
                 breakdown.king += KING_NOT_CASTLED_PENALTY if piece.colour else -KING_NOT_CASTLED_PENALTY
+    score = breakdown.total
+
+    if board.turn % 2 != 0:  # Black to move
+        score = -score
 
     if debug:
-        return breakdown.total, breakdown
-    return breakdown.total
+        return score, breakdown
+    return score
 
 def terminal_eval(board, state):
     if state != 1:
