@@ -398,6 +398,22 @@ class Board:
 
         return legal
 
+    def _remove_piece_from_list(self, piece):
+        if piece is None:
+            return
+        if piece.colour:
+            self.whitePieces.remove(piece)
+        else:
+            self.blackPieces.remove(piece)
+
+    def _add_piece_to_list(self, piece):
+        if piece is None:
+            return
+        if piece.colour:
+            self.whitePieces.append(piece)
+        else:
+            self.blackPieces.append(piece)
+
     def _apply_temp_move(self, move: Move):
         move._temp_turn = self.turn
         self.turn += 1
@@ -413,8 +429,10 @@ class Board:
         move._temp_old_pos = piece.pos
         move._temp_hasMoved = getattr(piece, 'hasMoved', None)
 
-        # Apply basic move
         self.boardList[y1][x1] = None
+        if captured:
+            self._remove_piece_from_list(captured)
+
         self.boardList[y2][x2] = piece
         piece.pos = (x2, y2)
 
@@ -438,8 +456,12 @@ class Board:
 
         elif move.typeOfMove == 2:  # En passant
             px1, py1 = move.piece2OldPos
-            move._temp_en_passant_piece = self.boardList[py1][px1]
+            ep_piece = self.boardList[py1][px1]
+
+            move._temp_en_passant_piece = ep_piece
+
             self.boardList[py1][px1] = None
+            self._remove_piece_from_list(ep_piece)
 
     def _undo_temp_move(self, move: Move):
         x1, y1 = move.oldPos
@@ -454,6 +476,10 @@ class Board:
         self.boardList[y2][x2] = move._temp_captured
         self.boardList[y1][x1] = piece
         piece.pos = move._temp_old_pos
+
+        # Restore captured piece back into lists (normal capture)
+        if move._temp_captured:
+            self._add_piece_to_list(move._temp_captured)
 
         # Restore hasMoved flag
         if move._temp_hasMoved is not None:
@@ -475,7 +501,11 @@ class Board:
 
         elif move.typeOfMove == 2:  # En passant
             px1, py1 = move.piece2OldPos
-            self.boardList[py1][px1] = move._temp_en_passant_piece
+            ep_piece = move._temp_en_passant_piece
+
+            self.boardList[py1][px1] = ep_piece
+            self._add_piece_to_list(ep_piece)
+
             del move._temp_en_passant_piece
 
         # Clean up temporary attributes
