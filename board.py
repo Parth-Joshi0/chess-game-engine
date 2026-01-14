@@ -599,39 +599,59 @@ class Board:
         self.turn += 1
         self.position_counts[self.position_key()] += 1
 
-    def position_key(self) -> str:
+    def position_key(self) -> bytes:
         #Stores the position in a bit key, the first bit is the side to move,
         #The next 4 bits are the castling rights, (white king, white queen, black king, black queen)
         #The next 8 bits are the target square for en-passant (x, y) - all 1's if it is none
         #The next 256 bits are the pieces, each mapped to a seperate code, where the first bit is the colour
 
         MAPPING = {
-            "king": "110", "knight": "101", "queen": "100", "bishop": "011", "rook": "010", "pawn": "001"
+            "king": "110",
+            "knight": "101",
+            "queen": "100",
+            "bishop": "011",
+            "rook": "010",
+            "pawn": "001",
         }
-        key = "1" if self.turn%2==0 else "0"
+
+        bits = []
+        append = bits.append
+
+        append("1" if self.turn % 2 == 0 else "0")
 
         rooks = [self.boardList[7][0], self.boardList[7][7], self.boardList[0][0], self.boardList[0][7]]
-
-        for i, rook in enumerate(rooks):
+        for rook in rooks:
             if rook and rook.name == "rook":
                 king = self.whiteKing if rook.colour else self.blackKing
-                if not rook.hasMoved and not king.hasMoved:
-                    key += "1"
+                if (not rook.hasMoved) and (not king.hasMoved):
+                    append("1")
                 else:
-                    key += "1"
+                    append("0")
             else:
-                key += "0"
+                append("0")
 
-        key += (str(format(self.enPassantTarget[0], "04b")) + str(format(self.enPassantTarget[0], "04b"))) if self.enPassantTarget else "11111111"
+        if self.enPassantTarget:
+            x, y = self.enPassantTarget
+            append(format(x, "04b"))
+            append(format(y, "04b"))
+        else:
+            append("11111111")
 
         for y in range(8):
             for x in range(8):
                 p = self.boardList[y][x]
                 if p is None:
-                    key += "0000"
+                    append("0000")
                 else:
-                    key += ("1" if p.colour else "0") + MAPPING[p.name]
-        return key
+                    append(("1" if p.colour else "0") + MAPPING[p.name])
+
+        bitstr = "".join(bits)
+
+        pad = (-len(bitstr)) % 8
+        if pad:
+            bitstr += "0" * pad
+
+        return int(bitstr, 2).to_bytes(len(bitstr) // 8, byteorder="big")
 
     def generate_legal_moves(self, colour: bool):
         pieceList = self.whitePieces if colour else self.blackPieces
