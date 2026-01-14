@@ -40,7 +40,7 @@ class SearchEngine:
 
     def negamax(self, board, depth, alpha, beta, ply):
         if depth == 0:
-            return evaluate(board, False)
+            return self.quiescence_search(board, alpha, beta, ply)
 
         childMoves = board.generate_legal_moves(board.turn%2==0)
 
@@ -48,7 +48,7 @@ class SearchEngine:
         if state != 0:
             return terminal_eval(board, state)
 
-        childMoves = self.order_moves(board, childMoves)
+        childMoves = self.order_moves(childMoves)
         value = -math.inf
 
         for move in childMoves:
@@ -60,7 +60,7 @@ class SearchEngine:
                 break
         return value
 
-    def order_moves(self, board, moves):
+    def order_moves(self, moves):
 
         def abs_worth(p: Piece):
             return abs(p.piece_worth()) if p else 0
@@ -84,3 +84,28 @@ class SearchEngine:
             return 0
 
         return sorted(moves, key=score_moves, reverse=True)
+
+    def quiescence_search(self, board, alpha, beta, ply):
+        stand_pat = evaluate(board, False)
+
+        if stand_pat >= beta:
+            return beta
+
+        if stand_pat > alpha:
+            alpha = stand_pat
+
+        moves = board.generate_legal_moves(board.turn%2==0)
+        tactical = [m for m in moves if m.typeOfMove in (2,3,4)]
+        tactical = self.order_moves(tactical)
+
+        for move in tactical:
+            board._apply_temp_move(move)
+            score = -self.quiescence_search(board, -beta, -alpha, ply + 1)
+            board._undo_temp_move(move)
+
+            if score >= beta:
+                return beta
+            if score > alpha:
+                alpha = score
+
+        return alpha
