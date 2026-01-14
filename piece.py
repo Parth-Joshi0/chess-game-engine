@@ -10,6 +10,9 @@ class Piece:
     def moves_available(self) -> list[(int, int)]:
         return []
 
+    def piece_worth(self) -> int:
+        return 0
+
 class King(Piece):
     def __init__(self, colour: bool, xpos: int, ypos: int):
         self.hasMoved = False
@@ -52,6 +55,9 @@ class Rook(Piece):
         self.hasMoved = True
         super().move(x, y)
 
+    def piece_worth(self) -> int:
+        return self.colour * 500
+
 class Knight(Piece):
     def __init__(self, colour: bool, xpos: int, ypos: int):
         super().__init__(colour, xpos, ypos)
@@ -74,6 +80,9 @@ class Knight(Piece):
 
         return moves
 
+    def piece_worth(self) -> int:
+        return self.colour * 325
+
 class Bishop(Piece):
     def __init__(self, colour: bool, xpos: int, ypos: int):
         super().__init__(colour, xpos, ypos)
@@ -95,6 +104,9 @@ class Bishop(Piece):
                 moves.append((x-i, y-i))
 
         return moves
+
+    def piece_worth(self) -> int:
+        return self.colour * 330
 
 class Queen(Piece):
     def __init__(self, colour: bool, xpos: int, ypos: int):
@@ -124,6 +136,9 @@ class Queen(Piece):
                 moves.append((x-i, y-i))
         return list(dict.fromkeys(moves))
 
+    def piece_worth(self) -> int:
+        return self.colour * 900
+
 class Pawn(Piece):
     def __init__(self, colour: bool, xpos: int, ypos: int):
         super().__init__(colour, xpos, ypos)
@@ -142,3 +157,6 @@ class Pawn(Piece):
             moves.append((x, y+2*direction))
 
         return moves
+
+    def piece_worth(self) -> int:
+        return self.colour * 100
