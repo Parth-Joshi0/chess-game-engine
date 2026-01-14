@@ -608,7 +608,6 @@ class Board:
                     key += "0000"
                 else:
                     key += ("1" if p.colour else "0") + MAPPING[p.name]
-        print(key)
         return key
 
     def generate_legal_moves(self, colour: bool):

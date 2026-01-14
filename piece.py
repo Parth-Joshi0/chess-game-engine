@@ -1,3 +1,6 @@
+WHITE = True
+BLACK = False
+
 class Piece:
     def __init__(self, colour: bool, xpos: int, ypos: int):
         self.colour = colour
@@ -56,7 +59,7 @@ class Rook(Piece):
         super().move(x, y)
 
     def piece_worth(self) -> int:
-        return self.colour * 500
+        return 500 if self.colour == WHITE else -500
 
 class Knight(Piece):
     def __init__(self, colour: bool, xpos: int, ypos: int):
@@ -81,7 +84,7 @@ class Knight(Piece):
         return moves
 
     def piece_worth(self) -> int:
-        return self.colour * 325
+        return 325 if self.colour == WHITE else -325
 
 class Bishop(Piece):
     def __init__(self, colour: bool, xpos: int, ypos: int):
@@ -106,7 +109,7 @@ class Bishop(Piece):
         return moves
 
     def piece_worth(self) -> int:
-        return self.colour * 330
+        return 330 if self.colour == WHITE else -330
 
 class Queen(Piece):
     def __init__(self, colour: bool, xpos: int, ypos: int):
@@ -137,7 +140,7 @@ class Queen(Piece):
         return list(dict.fromkeys(moves))
 
     def piece_worth(self) -> int:
-        return self.colour * 900
+        return 900 if self.colour == WHITE else -900
 
 class Pawn(Piece):
     def __init__(self, colour: bool, xpos: int, ypos: int):
@@ -159,4 +162,4 @@ class Pawn(Piece):
         return moves
 
     def piece_worth(self) -> int:
-        return self.colour * 100
+        return 100 if self.colour == WHITE else -100
