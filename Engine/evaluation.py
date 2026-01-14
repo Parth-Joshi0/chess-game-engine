@@ -10,21 +10,17 @@ KING_NOT_CASTLED_PENALTY = -30
 
 MAX_MULT_BONUS = 0.6
 
-
 def clamp(x: float, lo: float, hi: float) -> float:
     return lo if x < lo else hi if x > hi else x
 
-
 def mirrored_y(colour: bool, y: int):
     return y if colour == WHITE else 7 - y
-
 
 def is_castled_square(colour: bool, x: int, y: int) -> bool:
     return (
             (colour == WHITE and (x, y) in [(6, 0), (2, 0)]) or
             (colour == BLACK and (x, y) in [(6, 7), (2, 7)])
     )
-
 
 @dataclass
 class EvalBreakdown:
@@ -35,7 +31,6 @@ class EvalBreakdown:
     @property
     def total(self) -> int:
         return self.material + self.pst + self.king
-
 
 def evaluate(board: Board, debug: bool) -> int | tuple[int, EvalBreakdown]:
     from Engine.pst import PIECE_SQUARE_TABLE

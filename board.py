@@ -402,7 +402,17 @@ class Board:
         for mv in pseudo:
             self._apply_temp_move(mv)
             if not self.in_check(piece.colour):
-                legal.append(mv)
+                if mv.typeOfMove == 3:
+                    knightPromo = Move(mv.oldPos, mv.newPos, piece, piece2=Knight(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
+                    QueenPromo = Move(mv.oldPos, mv.newPos, piece, piece2=Queen(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
+                    RookPromo = Move(mv.oldPos, mv.newPos, piece, piece2=Rook(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
+                    BishopPromo = Move(mv.oldPos, mv.newPos, piece, piece2=Bishop(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
+                    legal.append(knightPromo)
+                    legal.append(QueenPromo)
+                    legal.append(BishopPromo)
+                    legal.append(RookPromo)
+                else:
+                    legal.append(mv)
             self._undo_temp_move(mv)
 
         return legal
