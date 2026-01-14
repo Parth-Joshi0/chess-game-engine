@@ -399,31 +399,89 @@ class Board:
         return legal
 
     def _apply_temp_move(self, move: Move):
+        move._temp_turn = self.turn
+        self.turn += 1
+
         x1, y1 = move.oldPos
         x2, y2 = move.newPos
 
         piece = self.boardList[y1][x1]
         captured = self.boardList[y2][x2]
 
+        # Store original state
         move._temp_captured = captured
         move._temp_old_pos = piece.pos
+        move._temp_hasMoved = getattr(piece, 'hasMoved', None)
 
+        # Apply basic move
         self.boardList[y1][x1] = None
         self.boardList[y2][x2] = piece
         piece.pos = (x2, y2)
+
+        # Update hasMoved flag if it exists
+        if hasattr(piece, 'hasMoved'):
+            piece.hasMoved = True
+
+        # Handle special moves
+        if move.typeOfMove == 1:  # Castling
+            rx1, ry1 = move.piece2OldPos
+            rx2, ry2 = move.piece2NewPos
+            rook = self.boardList[ry1][rx1]
+
+            move._temp_rook_pos = rook.pos
+            move._temp_rook_hasMoved = rook.hasMoved
+
+            self.boardList[ry1][rx1] = None
+            self.boardList[ry2][rx2] = rook
+            rook.pos = (rx2, ry2)
+            rook.hasMoved = True
+
+        elif move.typeOfMove == 2:  # En passant
+            px1, py1 = move.piece2OldPos
+            move._temp_en_passant_piece = self.boardList[py1][px1]
+            self.boardList[py1][px1] = None
 
     def _undo_temp_move(self, move: Move):
         x1, y1 = move.oldPos
         x2, y2 = move.newPos
 
+        self.turn = move._temp_turn
+        del move._temp_turn
+
         piece = self.boardList[y2][x2]
 
+        # Restore basic move
         self.boardList[y2][x2] = move._temp_captured
         self.boardList[y1][x1] = piece
         piece.pos = move._temp_old_pos
 
+        # Restore hasMoved flag
+        if move._temp_hasMoved is not None:
+            piece.hasMoved = move._temp_hasMoved
+
+        # Undo special moves
+        if move.typeOfMove == 1:  # Castling
+            rx1, ry1 = move.piece2OldPos
+            rx2, ry2 = move.piece2NewPos
+            rook = self.boardList[ry2][rx2]
+
+            self.boardList[ry2][rx2] = None
+            self.boardList[ry1][rx1] = rook
+            rook.pos = move._temp_rook_pos
+            rook.hasMoved = move._temp_rook_hasMoved
+
+            del move._temp_rook_pos
+            del move._temp_rook_hasMoved
+
+        elif move.typeOfMove == 2:  # En passant
+            px1, py1 = move.piece2OldPos
+            self.boardList[py1][px1] = move._temp_en_passant_piece
+            del move._temp_en_passant_piece
+
+        # Clean up temporary attributes
         del move._temp_captured
         del move._temp_old_pos
+        del move._temp_hasMoved
 
     def game_end(self) -> int: #0 for game not ended, 1 for checkmate, 2 for stalemate, 3 for 50 move rule draw, 4 for 3fold repetion
         colour = True if self.turn % 2 == 0 else False
