@@ -8,7 +8,7 @@ def num_to_chess_notation(pos):
     return f"{file_letter}{rank_number}"
 
 class Move:
-    def __init__(self, oldPos, newPos, piece, piece2=None, typeOfMove=0):
+    def __init__(self, oldPos, newPos, piece, piece2=None, typeOfMove=0, promo_piece=None):
         self.oldPos = oldPos
         self.newPos = newPos
         self.piece = piece
@@ -16,6 +16,7 @@ class Move:
         self.typeOfMove = typeOfMove #0 for regular moving move, 1 for castling, 2 for enPassant, 3 for Promotion, 4 for capture
         self.piece2OldPos = (-1,-1)
         self.piece2NewPos = (-1,-1)
+        self.promo_piece = promo_piece
 
     def __eq__(self, other):
         if self.piece == other.piece and self.oldPos == other.oldPos and self.newPos == other.newPos:
@@ -152,6 +153,7 @@ class Board:
         for m in moves:
             if m.newPos[1] == promotion_row:
                 m.typeOfMove = 3  # promotion
+                m.promo_piece = Queen(m.piece.colour, m.newPos[0], m.newPos[1])
 
         # en Passant
         if self.enPassantTarget is not None:
@@ -403,10 +405,10 @@ class Board:
             self._apply_temp_move(mv)
             if not self.in_check(piece.colour):
                 if mv.typeOfMove == 3:
-                    knightPromo = Move(mv.oldPos, mv.newPos, piece, piece2=Knight(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
-                    QueenPromo = Move(mv.oldPos, mv.newPos, piece, piece2=Queen(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
-                    RookPromo = Move(mv.oldPos, mv.newPos, piece, piece2=Rook(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
-                    BishopPromo = Move(mv.oldPos, mv.newPos, piece, piece2=Bishop(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
+                    knightPromo = Move(mv.oldPos, mv.newPos, piece, promo_piece=Knight(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
+                    QueenPromo = Move(mv.oldPos, mv.newPos, piece, promo_piece=Queen(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
+                    RookPromo = Move(mv.oldPos, mv.newPos, piece, promo_piece=Rook(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
+                    BishopPromo = Move(mv.oldPos, mv.newPos, piece, promo_piece=Bishop(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
                     legal.append(knightPromo)
                     legal.append(QueenPromo)
                     legal.append(BishopPromo)
@@ -421,8 +423,15 @@ class Board:
         if piece is None:
             return
         if piece.colour:
+            if piece not in self.whitePieces:
+                print("REMOVE FAIL:", piece.name, piece.pos, "white")
+                print("whitePieces has:", [(p.name, p.pos) for p in self.whitePieces])
+                raise ValueError("Piece not in whitePieces")
             self.whitePieces.remove(piece)
         else:
+            if piece not in self.blackPieces:
+                print("REMOVE FAIL:", piece.name, piece.pos, "black")
+                raise ValueError("Piece not in blackPieces")
             self.blackPieces.remove(piece)
 
     def _add_piece_to_list(self, piece):
@@ -443,23 +452,67 @@ class Board:
         piece = self.boardList[y1][x1]
         captured = self.boardList[y2][x2]
 
-        # Store original state
+        # save global state
+        move._temp_enPassantTarget = self.enPassantTarget
+        move._temp_moveRuleTurns = self.moveRuleTurns
         move._temp_captured = captured
         move._temp_old_pos = piece.pos
-        move._temp_hasMoved = getattr(piece, 'hasMoved', None)
+        move._temp_hasMoved = getattr(piece, "hasMoved", None)
 
+        # update 50-move rule
+        is_pawn_move = (piece.name == "pawn")
+        is_capture = (captured is not None) or (move.typeOfMove == 2)
+        if is_pawn_move or is_capture:
+            self.moveRuleTurns = 0
+        else:
+            self.moveRuleTurns += 1
+
+        # en passant target
+        self.enPassantTarget = None
+        if piece.name == "pawn" and abs(y2 - y1) == 2:
+            passed_y = (y1 + y2) // 2
+            self.enPassantTarget = (x1, passed_y)
+
+        # HANDLE PROMOTION FIRST (includes promotion-capture)
+        if move.typeOfMove == 3:
+            promo = move.promo_piece
+            move._temp_pawn_obj = piece
+
+            # Remove pawn from origin square
+            self.boardList[y1][x1] = None
+
+            # Remove captured piece if it exists
+            if captured:
+                self._remove_piece_from_list(captured)
+
+            # Remove pawn from piece list
+            self._remove_piece_from_list(piece)
+
+            # Place promoted piece on destination
+            self.boardList[y2][x2] = promo
+            promo.pos = (x2, y2)
+
+            # Add promoted piece to list
+            self._add_piece_to_list(promo)
+
+            if hasattr(promo, "hasMoved"):
+                promo.hasMoved = True
+
+            return  #Exit early for promotions
+
+        # NORMAL MOVES (non-promotion)
         self.boardList[y1][x1] = None
+
         if captured:
             self._remove_piece_from_list(captured)
 
         self.boardList[y2][x2] = piece
         piece.pos = (x2, y2)
 
-        # Update hasMoved flag if it exists
-        if hasattr(piece, 'hasMoved'):
+        if hasattr(piece, "hasMoved"):
             piece.hasMoved = True
 
-        # Handle special moves
+        # Special moves
         if move.typeOfMove == 1:  # Castling
             rx1, ry1 = move.piece2OldPos
             rx2, ry2 = move.piece2NewPos
@@ -486,12 +539,49 @@ class Board:
         x1, y1 = move.oldPos
         x2, y2 = move.newPos
 
+        # restore turn
         self.turn = move._temp_turn
         del move._temp_turn
 
+        # restore global state
+        self.enPassantTarget = move._temp_enPassantTarget
+        self.moveRuleTurns = move._temp_moveRuleTurns
+        del move._temp_enPassantTarget
+        del move._temp_moveRuleTurns
+
+        # Promotion undo (must happen first)
+        if move.typeOfMove == 3:
+            promo_piece = self.boardList[y2][x2]  # Get promoted piece from board
+            pawn = move._temp_pawn_obj
+
+            # Remove promoted piece from list
+            self._remove_piece_from_list(promo_piece)
+
+            # Restore captured piece on destination (if any)
+            self.boardList[y2][x2] = move._temp_captured
+            if move._temp_captured:
+                self._add_piece_to_list(move._temp_captured)
+
+            # Restore pawn to origin
+            self.boardList[y1][x1] = pawn
+            pawn.pos = move._temp_old_pos
+
+            #ADD PAWN BACK TO PIECE LIST
+            self._add_piece_to_list(pawn)
+
+            if move._temp_hasMoved is not None:
+                pawn.hasMoved = move._temp_hasMoved
+
+            # Cleanup
+            del move._temp_pawn_obj
+            del move._temp_captured
+            del move._temp_old_pos
+            del move._temp_hasMoved
+            return
+
+        # Normal undo (non-promotion)
         piece = self.boardList[y2][x2]
 
-        # Restore basic move
         self.boardList[y2][x2] = move._temp_captured
         self.boardList[y1][x1] = piece
         piece.pos = move._temp_old_pos
@@ -500,7 +590,7 @@ class Board:
         if move._temp_captured:
             self._add_piece_to_list(move._temp_captured)
 
-        # Restore hasMoved flag
+        # Restore hasMoved
         if move._temp_hasMoved is not None:
             piece.hasMoved = move._temp_hasMoved
 
@@ -527,7 +617,7 @@ class Board:
 
             del move._temp_en_passant_piece
 
-        # Clean up temporary attributes
+        # Cleanup
         del move._temp_captured
         del move._temp_old_pos
         del move._temp_hasMoved

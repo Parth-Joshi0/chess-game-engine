@@ -66,7 +66,7 @@ class SearchEngine:
 
         state = board.game_end(childMoves)
         if state != 0:
-            return terminal_eval(board, state)
+            return terminal_eval(board, state, ply)
 
         childMoves = self.order_moves(childMoves)
         value = -math.inf
