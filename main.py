@@ -1,5 +1,6 @@
 import pygame
 
+from Engine.evaluation import evaluate
 from Engine.search import SearchEngine
 from board import *
 from piece import *
@@ -142,6 +143,7 @@ class Game:
             self.selected_from = None
             self.selected = None
             print(self.engine.choose_move(self.board, True))
+            print(evaluate(self.board, False))
             if (self.board.game_end() != 0):
                 self.game_over = True
                 self.game_over_text = "Checkmate!" if self.board.game_end() == 1 else "Stalemate!"

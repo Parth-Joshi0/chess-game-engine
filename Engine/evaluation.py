@@ -1,10 +1,10 @@
 from dataclasses import dataclass
-from board import Board
+from board import Board, Move
 
 WHITE = True
 BLACK = False
 
-KING_CASTLED_BONUS = 90
+KING_CASTLED_BONUS = 150
 KING_NOT_CASTLED_PENALTY = -30
 
 MAX_MULT_BONUS = 0.6
@@ -58,6 +58,12 @@ def evaluate(board: Board, debug: bool) -> int | tuple[int, EvalBreakdown]:
                 breakdown.king += KING_NOT_CASTLED_PENALTY if piece.colour else -KING_NOT_CASTLED_PENALTY
     score = breakdown.total
 
+    white_moves = board.get_pseudo_legal_moves(WHITE)
+    black_moves = board.get_pseudo_legal_moves(BLACK)
+
+    score += relative_mobility_bonus(white_moves)
+    score += relative_mobility_bonus(black_moves)
+
     if board.turn % 2 != 0:  # Black to move
         score = -score
 
@@ -70,3 +76,22 @@ def terminal_eval(board, state, ply):
         return 0
     else:
         return -1000000000 + ply
+
+def relative_mobility_bonus(moves : [Move]):
+    MOBILITY_BONUS = {
+        "king": 1,
+        "pawn": 2,
+        "queen": 3,
+        "bishop": 5,
+        "rook": 5,
+        "knight": 3
+    }
+
+    score = 0
+    for move in moves:
+        if move.piece.colour == WHITE:
+            score += MOBILITY_BONUS.get(move.piece.name)
+        else:
+            score -= MOBILITY_BONUS.get(move.piece.name)
+
+    return score

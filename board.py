@@ -749,3 +749,10 @@ class Board:
         for piece in pieceList:
             moves += self.get_legal_moves_by_piece(piece)
         return moves
+
+    def get_pseudo_legal_moves(self, colour: bool):
+        pieceList = self.whitePieces if colour else self.blackPieces
+        moves = []
+        for piece in pieceList:
+            moves += self.get_pseudo_legal_moves_by_piece(piece)
+        return moves
