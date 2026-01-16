@@ -48,6 +48,7 @@ class Board:
 
         self.position_counts = defaultdict(int)
         self.position_counts[self.position_key()] = 1
+        self.eval = 0
 
     def generate_board(self):
         WHITE = True
@@ -237,97 +238,38 @@ class Board:
         return moves
 
     def move(self, move: Move) -> str:
+        # reset any prior promotion state
         self.promotionPiece = None
 
-        legal_moves = self.get_legal_moves_by_piece((move.piece))
+        # Validate move against legal moves for that piece
+        legal_moves = self.get_legal_moves_by_piece(move.piece)
 
-        found = False
+        matched = None
         for m in legal_moves:
             if m.oldPos == move.oldPos and m.newPos == move.newPos:
-                move = m
-                found = True
+                matched = m
                 break
 
-        if not found:
+        if matched is None:
             return "ILLEGAL_MOVE"
 
-        x1, y1 = move.oldPos
-        x2, y2 = move.newPos
+        move = matched
 
-        self.enPassantTarget = None
+        # Promotion Moves - Special
+        if move.typeOfMove == 3:
+            x1, y1 = move.oldPos
+            x2, y2 = move.newPos
 
-        if move.typeOfMove == 0:
-            piece = self.boardList[y1][x1]
-            self.boardList[y1][x1] = None
+            self.enPassantTarget = None
 
-            self.boardList[y2][x2] = piece
-            piece.move(x2,y2)
-            self.turn += 1
-
-            if move.piece.name == "pawn":
-                self.moveRuleTurns = 0
-            else:
-                self.moveRuleTurns += 1
-
-            if move.piece.name == "pawn" and abs(y2 - y1) == 2:
-                passed_y = (y1 + y2) // 2
-                self.enPassantTarget = (x1, passed_y)
-
-        elif move.typeOfMove == 1: #Castle
-            king = self.boardList[y1][x1]
-            self.boardList[y1][x1] = None
-            self.boardList[y2][x2] = king
-            king.move(x2, y2)
-
-            rx1, ry1 = move.piece2OldPos
-            rx2, ry2 = move.piece2NewPos
-
-            rook = self.boardList[ry1][rx1]
-            self.boardList[ry1][rx1] = None
-            self.boardList[ry2][rx2] = rook
-            rook.move(rx2, ry2)
-
-            self.turn += 1
-
-        elif move.typeOfMove == 2: #en-passant
-            piece = self.boardList[y1][x1]
-            self.boardList[y1][x1] = None
-
-            px1, py1 = move.piece2OldPos
-            self.boardList[py1][px1] = None
-
-            if move.piece2.colour:
-                self.whitePieces.remove(move.piece2)
-            else:
-                self.blackPieces.remove(move.piece2)
-
-            self.boardList[y2][x2] = piece
-            piece.move(x2, y2)
-            self.turn += 1
-            self.moveRuleTurns = 0
-
-        elif move.typeOfMove == 3: #Promotion
             self.promotionPiece = self.boardList[y1][x1]
             self.promotionSquare = (x2, y2)
             self.moveRuleTurns = 0
             return "PROMOTION"
 
-        elif move.typeOfMove == 4: #Capture
-            piece = self.boardList[y1][x1]
-            self.boardList[y1][x1] = None
+        # All other moves
+        self._apply_temp_move(move)
 
-            target = self.boardList[y2][x2]
-            if target:
-                if target.colour:
-                    self.whitePieces.remove(target)
-                else:
-                    self.blackPieces.remove(target)
-
-            self.boardList[y2][x2] = piece
-            piece.move(x2, y2)
-            self.turn += 1
-            self.moveRuleTurns = 0
-        self.position_counts[self.position_key()] += 1
         return "VALID_MOVE"
 
     def is_square_attacked(self, x: int, y: int, by_colour: bool) -> bool:
@@ -498,6 +440,7 @@ class Board:
             if hasattr(promo, "hasMoved"):
                 promo.hasMoved = True
 
+            self.position_counts[self.position_key()] += 1
             return  #Exit early for promotions
 
         # NORMAL MOVES (non-promotion)
@@ -535,9 +478,13 @@ class Board:
             self.boardList[py1][px1] = None
             self._remove_piece_from_list(ep_piece)
 
+        self.position_counts[self.position_key()] += 1
+
     def _undo_temp_move(self, move: Move):
         x1, y1 = move.oldPos
         x2, y2 = move.newPos
+
+        self.position_counts[self.position_key()] -= 1
 
         # restore turn
         self.turn = move._temp_turn
