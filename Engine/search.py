@@ -11,37 +11,40 @@ class SearchEngine:
         self.transposition_table : dict[bytes, TranspositionTableEntry] = {}
         self.nodes = 0
 
-    def choose_move(self, board):
-        self.nodes = 0
-        best_move = None
-        best_value = -math.inf
+    def choose_move(self, board, iterative_deep = False):
+        if not iterative_deep:
+            self.nodes = 0
+            best_move = None
+            best_value = -math.inf
 
-        alpha = -math.inf
-        beta = math.inf
+            alpha = -math.inf
+            beta = math.inf
 
-        moves = board.generate_legal_moves(board.turn%2 == 0)
-        if not moves:
-            print("No Moves")
-            return None
+            moves = board.generate_legal_moves(board.turn%2 == 0)
+            if not moves:
+                print("No Moves")
+                return None
 
-        for move in moves:
-            board._apply_temp_move(move)
-            value = -self.negamax(
-                board,
-                self.max_depth - 1,
-                -beta,
-                -alpha,
-                1
-            )
-            board._undo_temp_move(move)
+            for move in moves:
+                board._apply_temp_move(move)
+                value = -self.negamax(
+                    board,
+                    self.max_depth - 1,
+                    -beta,
+                    -alpha,
+                    1
+                )
+                board._undo_temp_move(move)
 
-            if value > best_value:
-                best_value = value
-                best_move = move
+                if value > best_value:
+                    best_value = value
+                    best_move = move
 
-            alpha = max(alpha, best_value)
+                alpha = max(alpha, best_value)
 
-        return best_move
+            return best_move
+        else:
+            return self.iterative_deepening(board, self.max_depth)
 
     def negamax(self, board: Board, depth, alpha, beta, ply):
         alpha0 = alpha
@@ -145,6 +148,44 @@ class SearchEngine:
                 alpha = score
 
         return alpha
+
+    def iterative_deepening(self, board, max_depth=None):
+        if max_depth is None:
+            max_depth = self.max_depth
+
+        best_move = None
+        best_value = None
+
+        for depth in range(1, max_depth + 1):
+            value, move = self._search_root(board, depth)
+            if move is not None:
+                best_move = move
+                best_value = value
+
+        return best_move
+
+    def _search_root(self, board, depth):
+        best_move = None
+        best_value = -math.inf
+
+        alpha = -math.inf
+        beta = math.inf
+
+        moves = board.generate_legal_moves(board.turn%2==0)
+        moves = self.order_moves(moves)
+
+        for move in moves:
+            board._apply_temp_move(move)
+            value = -self.negamax(board, depth - 1, -beta, -alpha, 1)
+            board._undo_temp_move(move)
+
+            if value > best_value:
+                best_value = value
+                best_move = move
+
+            alpha = max(alpha, best_value)
+
+        return best_value, best_move
 
 @dataclass
 class TranspositionTableEntry:
