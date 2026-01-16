@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from Engine.evaluation import evaluate, terminal_eval
 from board import Board, Move
 import math
+import time
 from piece import Piece
 
 class SearchEngine:
@@ -12,6 +13,8 @@ class SearchEngine:
         self.nodes = 0
 
     def choose_move(self, board, iterative_deep = False):
+        self.nodes = 0
+        start_time = time.time()
         if not iterative_deep:
             self.nodes = 0
             best_move = None
@@ -42,9 +45,29 @@ class SearchEngine:
 
                 alpha = max(alpha, best_value)
 
+            end_time = time.time()
+            duration = end_time - start_time
+
+            # Calculate NPS (avoid division by zero)
+            nps = self.nodes / duration if duration > 0 else 0
+
+            print(f"Nodes: {self.nodes}")
+            print(f"Time: {duration:.2f}s")
+            print(f"NPS: {int(nps)} ({int(nps / 1000)} kN/s)")
+
             return best_move
         else:
-            return self.iterative_deepening(board, self.max_depth)
+            result = self.iterative_deepening(board, self.max_depth)
+            end_time = time.time()
+            duration = end_time - start_time
+
+            # Calculate NPS (avoid division by zero)
+            nps = self.nodes / duration if duration > 0 else 0
+
+            print(f"Nodes: {self.nodes}")
+            print(f"Time: {duration:.2f}s")
+            print(f"NPS: {int(nps)} ({int(nps / 1000)} kN/s)")
+            return result
 
     def negamax(self, board: Board, depth, alpha, beta, ply):
         alpha0 = alpha
