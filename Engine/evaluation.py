@@ -32,31 +32,33 @@ class EvalBreakdown:
         return self.material + self.pst + self.king
 
 def evaluate(board: Board, debug: bool) -> int | tuple[int, EvalBreakdown]:
-    from Engine.pst import PIECE_SQUARE_TABLE
+    # from Engine.pst import PIECE_SQUARE_TABLE
+    #
+    # breakdown = EvalBreakdown()
+    #
+    # for piece in board.whitePieces + board.blackPieces:
+    #     x, y = piece.pos
+    #     name = piece.name
+    #     value = piece.piece_worth()
+    #
+    #     breakdown.material += value
+    #     table = PIECE_SQUARE_TABLE.get(name)
+    #
+    #     if name != "king":
+    #         pct = table[mirrored_y(piece.colour, y)][x]
+    #         pct = clamp(pct, -MAX_MULT_BONUS, MAX_MULT_BONUS)
+    #         breakdown.pst += int(round(value * pct))
+    #     else:
+    #         king_pst = table[mirrored_y(piece.colour, y)][x]
+    #         breakdown.king += int(round(100 * king_pst)) if piece.colour else -int(round(100 * king_pst))
+    #
+    #         if is_castled_square(piece.colour, x, y):
+    #             breakdown.king += KING_CASTLED_BONUS if piece.colour else -KING_CASTLED_BONUS
+    #         else:
+    #             breakdown.king += KING_NOT_CASTLED_PENALTY if piece.colour else -KING_NOT_CASTLED_PENALTY
+    # score = breakdown.total
 
-    breakdown = EvalBreakdown()
-
-    for piece in board.whitePieces + board.blackPieces:
-        x, y = piece.pos
-        name = piece.name
-        value = piece.piece_worth()
-
-        breakdown.material += value
-        table = PIECE_SQUARE_TABLE.get(name)
-
-        if name != "king":
-            pct = table[mirrored_y(piece.colour, y)][x]
-            pct = clamp(pct, -MAX_MULT_BONUS, MAX_MULT_BONUS)
-            breakdown.pst += int(round(value * pct))
-        else:
-            king_pst = table[mirrored_y(piece.colour, y)][x]
-            breakdown.king += int(round(100 * king_pst)) if piece.colour else -int(round(100 * king_pst))
-
-            if is_castled_square(piece.colour, x, y):
-                breakdown.king += KING_CASTLED_BONUS if piece.colour else -KING_CASTLED_BONUS
-            else:
-                breakdown.king += KING_NOT_CASTLED_PENALTY if piece.colour else -KING_NOT_CASTLED_PENALTY
-    score = breakdown.total
+    score = board.eval
 
     white_moves = board.get_pseudo_legal_moves(WHITE)
     black_moves = board.get_pseudo_legal_moves(BLACK)
@@ -68,7 +70,7 @@ def evaluate(board: Board, debug: bool) -> int | tuple[int, EvalBreakdown]:
         score = -score
 
     if debug:
-        return score, breakdown
+        return score
     return score
 
 def terminal_eval(board, state, ply):

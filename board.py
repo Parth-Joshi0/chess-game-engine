@@ -1,3 +1,4 @@
+from Engine.pst import PIECE_SQUARE_TABLE
 from piece import *
 from collections import defaultdict
 
@@ -37,7 +38,7 @@ class Board:
         self.turn = 0
         self.moveRuleTurns = 0
 
-        self.boardList = self.boardList = [[None for _ in range(8)] for _ in range(8)]
+        self.boardList : list[list[Piece | None]] = [[None for _ in range(8)] for _ in range(8)]
 
         self.enPassantTarget = None
 
@@ -385,6 +386,7 @@ class Board:
             self.blackPieces.append(piece)
 
     def _apply_temp_move(self, move: Move):
+        move._temp_eval_delta = 0
         move._temp_turn = self.turn
         self.turn += 1
 
@@ -393,6 +395,8 @@ class Board:
 
         piece = self.boardList[y1][x1]
         captured = self.boardList[y2][x2]
+
+        move._temp_eval_delta -= self.pst_value(piece, x1, y1)
 
         # save global state
         move._temp_enPassantTarget = self.enPassantTarget
@@ -420,11 +424,18 @@ class Board:
             promo = move.promo_piece
             move._temp_pawn_obj = piece
 
+            move._temp_eval_delta += self.pst_value(promo, x2, y2)
+            move._temp_eval_delta -= self.pst_value(piece, x1, y1)
+            move._temp_eval_delta -= piece.piece_worth()
+            move._temp_eval_delta += promo.piece_worth()
+
             # Remove pawn from origin square
             self.boardList[y1][x1] = None
 
             # Remove captured piece if it exists
             if captured:
+                move._temp_eval_delta -= captured.piece_worth()
+                move._temp_eval_delta -= self.pst_value(captured, x2, y2)
                 self._remove_piece_from_list(captured)
 
             # Remove pawn from piece list
@@ -441,13 +452,18 @@ class Board:
                 promo.hasMoved = True
 
             self.position_counts[self.position_key()] += 1
+
+            self.eval += move._temp_eval_delta
             return  #Exit early for promotions
 
         # NORMAL MOVES (non-promotion)
         self.boardList[y1][x1] = None
+        move._temp_eval_delta += self.pst_value(piece, x2, y2)
 
         if captured:
             self._remove_piece_from_list(captured)
+            move._temp_eval_delta -= self.pst_value(captured, x2, y2)
+            move._temp_eval_delta -= captured.piece_worth()
 
         self.boardList[y2][x2] = piece
         piece.pos = (x2, y2)
@@ -461,6 +477,8 @@ class Board:
             rx2, ry2 = move.piece2NewPos
             rook = self.boardList[ry1][rx1]
 
+            move._temp_eval_delta += self.pst_value(rook, rx2, ry2)
+            move._temp_eval_delta -= self.pst_value(rook, rx1, ry1)
             move._temp_rook_pos = rook.pos
             move._temp_rook_hasMoved = rook.hasMoved
 
@@ -473,17 +491,21 @@ class Board:
             px1, py1 = move.piece2OldPos
             ep_piece = self.boardList[py1][px1]
 
+            move._temp_eval_delta -= self.pst_value(ep_piece, px1, py1)
+            move._temp_eval_delta -= ep_piece.piece_worth()
             move._temp_en_passant_piece = ep_piece
 
             self.boardList[py1][px1] = None
             self._remove_piece_from_list(ep_piece)
 
         self.position_counts[self.position_key()] += 1
+        self.eval += move._temp_eval_delta
 
     def _undo_temp_move(self, move: Move):
         x1, y1 = move.oldPos
         x2, y2 = move.newPos
 
+        self.eval -= move._temp_eval_delta
         self.position_counts[self.position_key()] -= 1
 
         # restore turn
@@ -594,47 +616,51 @@ class Board:
         return 2
 
     def finalize_promotion(self, choice):
-        piece = None
-        colour = self.promotionPiece.colour
-        x1, y1 = self.promotionPiece.pos
+        pawn = self.promotionPiece
+        if pawn is None:
+            return
+
+        colour = pawn.colour
+        x1, y1 = pawn.pos
         x2, y2 = self.promotionSquare
 
         match choice:
             case "Q":
-                piece = Queen(colour, x2, y2)
+                promo = Queen(colour, x2, y2)
             case "N":
-                piece = Knight(colour, x2, y2)
+                promo = Knight(colour, x2, y2)
             case "B":
-                piece = Bishop(colour, x2, y2)
+                promo = Bishop(colour, x2, y2)
             case "R":
-                piece = Rook(colour, x2, y2)
+                promo = Rook(colour, x2, y2)
+            case _:
+                return
 
-        if self.boardList[y2][x2] is None:
-            self.boardList[y2][x2] = piece
-            self.boardList[y1][x1] = None
+        captured = self.boardList[y2][x2]
 
-            if piece.colour:
-                self.whitePieces.remove(self.promotionPiece)
-                self.whitePieces.append(piece)
-            else:
-                self.blackPieces.remove(self.promotionPiece)
-                self.blackPieces.append(piece)
-        else:
-            piece2 = self.boardList[y2][x2]
-            self.boardList[y2][x2] = piece
-            self.boardList[y1][x1] = None
+        promo_delta = 0
+        promo_delta -= pawn.piece_worth()
+        promo_delta += promo.piece_worth()
+        promo_delta -= self.pst_value(pawn, x1, y1)
+        promo_delta += self.pst_value(promo, x2, y2)
+        if captured is not None:
+            promo_delta -= captured.piece_worth()
+            promo_delta -= self.pst_value(captured, x2, y2)
 
-            if piece.colour:
-                self.whitePieces.remove(self.promotionPiece)
-                self.whitePieces.append(piece)
-                self.blackPieces.remove(piece2)
-            else:
-                self.blackPieces.remove(self.promotionPiece)
-                self.blackPieces.append(piece)
-                self.whitePieces.remove(piece2)
+        self.boardList[y1][x1] = None
+        self.boardList[y2][x2] = promo
 
+        self._remove_piece_from_list(pawn)
+        if captured is not None:
+            self._remove_piece_from_list(captured)
+        self._add_piece_to_list(promo)
+
+        self.eval += promo_delta
         self.turn += 1
         self.position_counts[self.position_key()] += 1
+
+        self.promotionPiece = None
+        self.promotionSquare = None
 
     def position_key(self) -> bytes:
         #Stores the position in a bit key, the first bit is the side to move,
@@ -703,3 +729,26 @@ class Board:
         for piece in pieceList:
             moves += self.get_pseudo_legal_moves_by_piece(piece)
         return moves
+
+    def mirrored_y(self, colour: bool, y: int) -> int:
+        return y if colour else 7 - y
+
+    def clamp(self, v, lo, hi):
+        return max(lo, min(hi, v))
+
+    def pst_value(self, piece, x: int, y: int) -> int:
+        table = PIECE_SQUARE_TABLE.get(piece.name)
+        if table is None:
+            return 0
+
+        my = self.mirrored_y(piece.colour, y)
+
+        if piece.name != "king":
+            pct = table[my][x]
+            pct = self.clamp(pct, -0.6, 0.6)
+            return int(round(piece.piece_worth() * pct))
+
+        # king PST ONLY (no castling bonus/penalty)
+        king_pst = table[my][x]
+        val = int(round(100 * king_pst))
+        return val if piece.colour else -val
