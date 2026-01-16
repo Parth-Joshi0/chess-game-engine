@@ -730,25 +730,13 @@ class Board:
             moves += self.get_pseudo_legal_moves_by_piece(piece)
         return moves
 
-    def mirrored_y(self, colour: bool, y: int) -> int:
-        return y if colour else 7 - y
-
-    def clamp(self, v, lo, hi):
-        return max(lo, min(hi, v))
-
     def pst_value(self, piece, x: int, y: int) -> int:
         table = PIECE_SQUARE_TABLE.get(piece.name)
         if table is None:
             return 0
 
-        my = self.mirrored_y(piece.colour, y)
+        ty = (7 - y) if piece.colour == WHITE else y
+        bonus = table[ty][x]
 
-        if piece.name != "king":
-            pct = table[my][x]
-            pct = self.clamp(pct, -0.6, 0.6)
-            return int(round(piece.piece_worth() * pct))
-
-        # king PST ONLY (no castling bonus/penalty)
-        king_pst = table[my][x]
-        val = int(round(100 * king_pst))
-        return val if piece.colour else -val
+        # convert to White POV: black's bonus counts negatively
+        return bonus if piece.colour == WHITE else -bonus
