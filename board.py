@@ -151,11 +151,24 @@ class Board:
                 if target is not None and target.colour != piece.colour:
                     moves.append(Move((x, y), (x2, y2), piece, piece2=target, typeOfMove=4))
 
+        extraPromos = []
         #promotion flag
         for m in moves:
             if m.newPos[1] == promotion_row:
                 m.typeOfMove = 3  # promotion
                 m.promo_piece = Queen(m.piece.colour, m.newPos[0], m.newPos[1])
+                rookPromo = Move(m.oldPos, m.newPos, piece,
+                                 promo_piece=Rook(colour=piece.colour, xpos=m.newPos[0], ypos=m.newPos[1]),
+                                 typeOfMove=3)
+                bishopPromo = Move(m.oldPos, m.newPos, piece,
+                                 promo_piece=Bishop(colour=piece.colour, xpos=m.newPos[0], ypos=m.newPos[1]),
+                                 typeOfMove=3)
+                knightPromo = Move(m.oldPos, m.newPos, piece,
+                                   promo_piece=Knight(colour=piece.colour, xpos=m.newPos[0], ypos=m.newPos[1]),
+                                   typeOfMove=3)
+                extraPromos.extend([rookPromo, bishopPromo, knightPromo])
+
+        moves.extend(extraPromos)
 
         # en Passant
         if self.enPassantTarget is not None:
@@ -347,17 +360,7 @@ class Board:
         for mv in pseudo:
             self._apply_temp_move(mv)
             if not self.in_check(piece.colour):
-                if mv.typeOfMove == 3:
-                    knightPromo = Move(mv.oldPos, mv.newPos, piece, promo_piece=Knight(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
-                    QueenPromo = Move(mv.oldPos, mv.newPos, piece, promo_piece=Queen(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
-                    RookPromo = Move(mv.oldPos, mv.newPos, piece, promo_piece=Rook(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
-                    BishopPromo = Move(mv.oldPos, mv.newPos, piece, promo_piece=Bishop(colour=piece.colour, xpos=mv.newPos[0], ypos=mv.newPos[1]), typeOfMove=3)
-                    legal.append(knightPromo)
-                    legal.append(QueenPromo)
-                    legal.append(BishopPromo)
-                    legal.append(RookPromo)
-                else:
-                    legal.append(mv)
+                legal.append(mv)
             self._undo_temp_move(mv)
 
         return legal
