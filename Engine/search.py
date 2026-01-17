@@ -88,7 +88,8 @@ class SearchEngine:
         if depth == 0:
             return self.quiescence_search(board, alpha, beta, ply)
 
-        childMoves = board.generate_legal_moves(board.turn%2==0)
+        childMoves = board.get_pseudo_legal_moves(board.turn%2==0)
+        best_move = None
 
         state = board.game_end(childMoves)
         if state != 0:
@@ -100,6 +101,9 @@ class SearchEngine:
         for move in childMoves:
             self.nodes += 1
             board._apply_temp_move(move)
+            if board.in_check(board.turn%2==1):
+                board._undo_temp_move(move)
+                continue
             score = -self.negamax(board, depth - 1, -beta, -alpha, ply + 1)
             board._undo_temp_move(move)
 
@@ -118,7 +122,8 @@ class SearchEngine:
         else:
             flag = "EXACT"
 
-        self.transposition_table[key] = TranspositionTableEntry(depth=depth, value=value, flag=flag, best_move=best_move)
+        if best_move is not None:
+            self.transposition_table[key] = TranspositionTableEntry(depth=depth, value=value, flag=flag, best_move=best_move)
 
         return value
 
@@ -156,12 +161,16 @@ class SearchEngine:
         if stand_pat > alpha:
             alpha = stand_pat
 
-        moves = board.generate_legal_moves(board.turn%2==0)
+        moves = board.get_pseudo_legal_moves(board.turn%2==0)
         tactical = [m for m in moves if m.typeOfMove in (2,3,4)]
         tactical = self.order_moves(tactical)
 
         for move in tactical:
+            self.nodes += 1
             board._apply_temp_move(move)
+            if board.in_check(board.turn%2==1):
+                board._undo_temp_move(move)
+                continue
             score = -self.quiescence_search(board, -beta, -alpha, ply + 1)
             board._undo_temp_move(move)
 
@@ -185,6 +194,8 @@ class SearchEngine:
                 best_move = move
                 best_value = value
 
+        best_value = best_value if board.turn % 2 == 0 else -best_value
+        print(f"Evaluation: {best_value}")
         return best_move
 
     def _search_root(self, board, depth):
@@ -194,11 +205,14 @@ class SearchEngine:
         alpha = -math.inf
         beta = math.inf
 
-        moves = board.generate_legal_moves(board.turn%2==0)
+        moves = board.get_pseudo_legal_moves(board.turn%2==0)
         moves = self.order_moves(moves)
 
         for move in moves:
             board._apply_temp_move(move)
+            if board.in_check(board.turn%2==1):
+                board._undo_temp_move(move)
+                continue
             value = -self.negamax(board, depth - 1, -beta, -alpha, 1)
             board._undo_temp_move(move)
 
