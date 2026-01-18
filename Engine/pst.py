@@ -32,14 +32,14 @@ BISHOP_POS_BONUS = [
 ]
 
 ROOK_POS_BONUS = [
-    [0, 0, 0, 5, 5, 0, 0, 0],
-    [30, 30, 30, 35, 35, 30, 30, 30],
+    [ 0,  0,  0,  5,  5,  0,  0,  0],
+    [ 5,  5,  5, 10, 10,  5,  5,  5],
     [10, 10, 10, 15, 15, 10, 10, 10],
-    [5, 5, 5, 10, 10, 5, 5, 5],
-    [5, 5, 5, 10, 10, 5, 5, 5],
     [10, 10, 10, 15, 15, 10, 10, 10],
-    [30, 30, 30, 35, 35, 30, 30, 30],
-    [0, 0, 0, 5, 5, 0, 0, 0],
+    [10, 10, 10, 15, 15, 10, 10, 10],
+    [15, 15, 15, 20, 20, 15, 15, 15],
+    [20, 20, 20, 25, 25, 20, 20, 20],
+    [ 0,  0,  0,  5,  5,  0,  0,  0],
 ]
 
 QUEEN_POS_BONUS = [
@@ -53,7 +53,7 @@ QUEEN_POS_BONUS = [
     [-5, -5, -5, -5, -5, -5, -5, -5],
 ]
 
-KING_POS_BONUS = [
+ENDGAME_KING_POS_BONUS = [
     [-40, -30, -20, -10, -10, -20, -30, -40],
     [-30, -20, -10,   0,   0, -10, -20, -30],
     [-20, -10,   0,  10,  10,   0, -10, -20],
@@ -64,11 +64,31 @@ KING_POS_BONUS = [
     [-60, -40, -20, -10, -10, -20, -40, -60],
 ]
 
-PIECE_SQUARE_TABLE = {
+MIDDLEGAME_KING_POS_BONUS = [
+    [-60, -70, -70, -70, -70, -70, -70, -60],
+    [-60, -70, -70, -70, -70, -70, -70, -60],
+    [-50, -60, -60, -60, -60, -60, -60, -50],
+    [-40, -50, -50, -50, -50, -50, -50, -40],
+    [-30, -40, -40, -40, -40, -40, -40, -30],
+    [-20, -30, -30, -30, -30, -30, -30, -20],
+    [ -5, -10, -15, -25, -25, -15, -10,  -5],
+    [ 20,  30,  10, -10, -10,  10,  30,  20],
+]
+
+ENDGAME_PIECE_SQUARE_TABLE = {
     "pawn": PAWN_POS_BONUS,
     "knight": KNIGHT_POS_BONUS,
     "bishop": BISHOP_POS_BONUS,
     "rook": ROOK_POS_BONUS,
     "queen": QUEEN_POS_BONUS,
-    "king": KING_POS_BONUS,
+    "king": ENDGAME_KING_POS_BONUS,
+}
+
+MIDDLEGAME_PIECE_SQUARE_TABLE = {
+    "pawn": PAWN_POS_BONUS,
+    "knight": KNIGHT_POS_BONUS,
+    "bishop": BISHOP_POS_BONUS,
+    "rook": ROOK_POS_BONUS,
+    "queen": QUEEN_POS_BONUS,
+    "king": MIDDLEGAME_KING_POS_BONUS,
 }

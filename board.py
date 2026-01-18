@@ -1,4 +1,4 @@
-from Engine.pst import PIECE_SQUARE_TABLE
+from Engine.pst import ENDGAME_PIECE_SQUARE_TABLE, MIDDLEGAME_PIECE_SQUARE_TABLE
 from piece import *
 from collections import defaultdict
 
@@ -50,6 +50,7 @@ class Board:
         self.position_counts = defaultdict(int)
         self.position_counts[self.position_key()] = 1
         self.eval = 0
+        self.mg, self.eg = self.phase_weights()
 
     def generate_board(self):
         WHITE = True
@@ -393,6 +394,9 @@ class Board:
         move._temp_turn = self.turn
         self.turn += 1
 
+        move._mg = self.mg
+        move._eg = self.eg
+
         x1, y1 = move.oldPos
         x2, y2 = move.newPos
 
@@ -457,6 +461,7 @@ class Board:
             self.position_counts[self.position_key()] += 1
 
             self.eval += move._temp_eval_delta
+            self.mg, self.eg = self.phase_weights()
             return  #Exit early for promotions
 
         # NORMAL MOVES (non-promotion)
@@ -467,6 +472,7 @@ class Board:
             self._remove_piece_from_list(captured)
             move._temp_eval_delta -= self.pst_value(captured, x2, y2)
             move._temp_eval_delta -= captured.piece_worth()
+            self.mg, self.eg = self.phase_weights()
 
         self.boardList[y2][x2] = piece
         piece.pos = (x2, y2)
@@ -507,6 +513,8 @@ class Board:
     def _undo_temp_move(self, move: Move):
         x1, y1 = move.oldPos
         x2, y2 = move.newPos
+        self.mg = move._mg
+        self.eg = move._eg
 
         self.eval -= move._temp_eval_delta
         self.position_counts[self.position_key()] -= 1
@@ -734,12 +742,34 @@ class Board:
         return moves
 
     def pst_value(self, piece, x: int, y: int) -> int:
-        table = PIECE_SQUARE_TABLE.get(piece.name)
-        if table is None:
-            return 0
-
+        endgame_table = ENDGAME_PIECE_SQUARE_TABLE.get(piece.name)
+        middlegame_table = MIDDLEGAME_PIECE_SQUARE_TABLE.get(piece.name)
         ty = (7 - y) if piece.colour == WHITE else y
-        bonus = table[ty][x]
+        bonus = endgame_table[ty][x] * self.eg + middlegame_table[ty][x] * self.mg
 
         # convert to White POV: black's bonus counts negatively
         return bonus if piece.colour == WHITE else -bonus
+
+    def phase_weights(self) -> tuple[float, float]:
+        mg = 0.0
+
+        for p in self.whitePieces:
+            if p.name == "queen":
+                mg += 0.1666667
+            elif p.name == "rook":
+                mg += 0.0833333
+            elif p.name == "bishop" or p.name == "knight":
+                mg += 0.0416667
+
+        for p in self.blackPieces:
+            if p.name == "queen":
+                mg += 0.1666667
+            elif p.name == "rook":
+                mg += 0.0833333
+            elif p.name == "bishop" or p.name == "knight":
+                mg += 0.0416667
+
+        # mg ∈ [0, 1]
+        if mg > 1.0:
+            mg = 1.0
+        return mg, 1 - mg

@@ -41,8 +41,7 @@ def evaluate(board: Board, debug: bool) -> int | tuple[int, EvalBreakdown]:
 
     score += 2*(len(white_moves) - len(black_moves))
 
-    mg, eg = phase_weights(board)
-    score += mg * king_safety(board)
+    score += board.mg * king_safety(board)
     score += file_bonuses(board)
 
     if board.turn % 2 != 0:  # Black to move
@@ -57,30 +56,6 @@ def terminal_eval(state, ply):
         return 0
     else:
         return -1000000000 + ply
-
-def phase_weights(board) -> tuple[float, float]:
-    mg = 0.0
-
-    for p in board.whitePieces:
-        if p.name == "queen":
-            mg += 0.1666667
-        elif p.name == "rook":
-            mg += 0.0833333
-        elif p.name == "bishop" or p.name == "knight":
-            mg += 0.0416667
-
-    for p in board.blackPieces:
-        if p.name == "queen":
-            mg += 0.1666667
-        elif p.name == "rook":
-            mg += 0.0833333
-        elif p.name == "bishop" or p.name == "knight":
-            mg += 0.0416667
-
-    # mg ∈ [0, 1]
-    if mg > 1.0:
-        mg = 1.0
-    return mg, 1-mg
 
 def king_safety(board):
     score = 0
