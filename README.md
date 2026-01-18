@@ -33,7 +33,6 @@ This project focuses on **correctness, extensibility, and engine fundamentals**,
 - Correctly handles promotions, captures, and undo logic
 - Transposition table integration
 - Ongoing work:
-  - Iterative deepening
   - Evaluation refinement
   - Performance optimizations
 
