@@ -72,12 +72,3 @@ PIECE_SQUARE_TABLE = {
     "queen": QUEEN_POS_BONUS,
     "king": KING_POS_BONUS,
 }
-
-PIECE_SQUARE_TABLE = {
-    "pawn": PAWN_POS_BONUS,
-    "knight": KNIGHT_POS_BONUS,
-    "bishop": BISHOP_POS_BONUS,
-    "rook": ROOK_POS_BONUS,
-    "queen": QUEEN_POS_BONUS,
-    "king": KING_POS_BONUS,
-}
