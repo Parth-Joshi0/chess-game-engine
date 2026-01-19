@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-
+from homeScreen import run_home_screen, GameConfig
 import pygame
 import dataclasses
 from Engine.search import SearchEngine
@@ -25,15 +25,6 @@ GAME_END_STATE = {
     1: "Checkmate!", 2: "Stalemate!", 3: "Draw by 50 move rule", 4: "Draw by 3 fold repetition"
 }
 
-@dataclass
-class GameConfig:
-    white_player: str = "engine" # "human" or "engine"
-    black_player: str = "engine"
-
-    engine_mode: str = "depth" # "depth" or "time"
-    depth: int = 4
-    time_limit: float = 3 # seconds per move
-
 class Square:
     def __init__(self, row, col):
         self.row = row
@@ -43,7 +34,7 @@ class Square:
         return isinstance(other, Square) and self.row == other.row and self.col == other.col
 
 class Game:
-    def __init__(self):
+    def __init__(self, config: GameConfig):
         pygame.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption("Chess")
@@ -66,7 +57,7 @@ class Game:
         self.promotion_choices = ["Q", "R", "B", "N"]
         self.promotion_rects = {}
 
-        self.config = GameConfig()
+        self.config = config
 
         self.engine = SearchEngine(self.config.depth)
 
@@ -313,4 +304,10 @@ class Game:
             self.game_over_text = "Checkmate!" if self.board.game_end() == 1 else "Draw!"
 
 if __name__ == '__main__':
-    Game().run()
+    pygame.init()
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("Chess")
+    clock = pygame.time.Clock()
+
+    config = run_home_screen(screen, clock)
+    Game(config).run()
