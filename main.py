@@ -1,6 +1,5 @@
 import pygame
 
-from Engine.evaluation import evaluate
 from Engine.search import SearchEngine
 from board import *
 from piece import *
@@ -62,10 +61,10 @@ class Game:
         while self.running:
             self.clock.tick(FPS)
             self.handle_events()
+            self.do_engine_move_if_needed()
             self.render()
 
         pygame.quit()
-
     # ---------- Input ----------
     def handle_events(self):
         for event in pygame.event.get():
@@ -142,10 +141,9 @@ class Game:
             # success: clear selection
             self.selected_from = None
             self.selected = None
-            print(self.engine.choose_move(self.board, True))
-            if (self.board.game_end() != 0):
+            if self.board.game_end() != 0:
                 self.game_over = True
-                self.game_over_text = "Checkmate!" if self.board.game_end() == 1 else "Stalemate!"
+                self.game_over_text = "Checkmate!" if self.board.game_end() == 1 else "Draw!"
         elif moved == "PROMOTION":
             self.promotion_pending_ui = True
             self.selected = None
@@ -284,6 +282,23 @@ class Game:
         # optional instruction text
         msg = self.small_font.render("Choose promotion:", True, (255, 255, 255))
         self.screen.blit(msg, (start_x, y - 40))
+
+    def is_engine_turn(self) -> bool:
+        if self.board.turn%2 == 0: #Temporarily engine will be black
+            return False
+        return True
+
+    def do_engine_move_if_needed(self):
+        if self.game_over or self.promotion_pending_ui:
+            return
+        if not self.is_engine_turn():
+            return
+
+        move = self.engine.choose_move(self.board, True)
+        self.board._apply_temp_move(move)
+        if self.board.game_end() != 0:
+            self.game_over = True
+            self.game_over_text = "Checkmate!" if self.board.game_end() == 1 else "Draw!"
 
 if __name__ == '__main__':
     Game().run()
