@@ -6,70 +6,40 @@ import math
 import time
 from piece import Piece
 
+class SearchTimeout(Exception):
+    pass
+
 class SearchEngine:
-    def __init__(self, max_depth=4):
+    def __init__(self, max_depth=None, max_time=None):
         self.max_depth = max_depth
+        self.max_time = max_time
+        self._deadline = None
         self.transposition_table : dict[bytes, TranspositionTableEntry] = {}
         self.nodes = 0
 
-    def choose_move(self, board, iterative_deep = False):
+    def choose_move(self, board):
         self.nodes = 0
-        start_time = time.time()
-        if not iterative_deep:
-            self.nodes = 0
-            best_move = None
-            best_value = -math.inf
+        start_time = time.perf_counter()
 
-            alpha = -math.inf
-            beta = math.inf
-
-            moves = board.generate_legal_moves(board.turn%2 == 0)
-            if not moves:
-                print("No Moves")
-                return None
-
-            for move in moves:
-                board._apply_temp_move(move)
-                value = -self.negamax(
-                    board,
-                    self.max_depth - 1,
-                    -beta,
-                    -alpha,
-                    1
-                )
-                board._undo_temp_move(move)
-
-                if value > best_value:
-                    best_value = value
-                    best_move = move
-
-                alpha = max(alpha, best_value)
-
-            end_time = time.time()
-            duration = end_time - start_time
-
-            # Calculate NPS (avoid division by zero)
-            nps = self.nodes / duration if duration > 0 else 0
-
-            print(f"Nodes: {self.nodes}")
-            print(f"Time: {duration:.2f}s")
-            print(f"NPS: {int(nps)} ({int(nps / 1000)} kN/s)")
-
-            return best_move
+        if self.max_time is not None:
+            result = self.iterative_deepening_time(board)
+            print("time")
         else:
-            result = self.iterative_deepening(board, self.max_depth)
-            end_time = time.time()
-            duration = end_time - start_time
+            result = self.iterative_deepening(board)
 
-            # Calculate NPS (avoid division by zero)
-            nps = self.nodes / duration if duration > 0 else 0
+        end_time = time.perf_counter()
+        duration = end_time - start_time
 
-            print(f"Nodes: {self.nodes}")
-            print(f"Time: {duration:.2f}s")
-            print(f"NPS: {int(nps)} ({int(nps / 1000)} kN/s)")
-            return result
+        # Calculate NPS (avoid division by zero)
+        nps = self.nodes / duration if duration > 0 else 0
+
+        print(f"Nodes: {self.nodes}")
+        print(f"Time: {duration:.2f}s")
+        print(f"NPS: {int(nps)} ({int(nps / 1000)} kN/s)")
+        return result
 
     def negamax(self, board: Board, depth, alpha, beta, ply):
+        self._check_time()
         alpha0 = alpha
         key = board.position_key()
 
@@ -98,23 +68,31 @@ class SearchEngine:
         for move in childMoves:
             self.nodes += 1
             board._apply_temp_move(move)
-            if board.in_check(board.turn%2==1):
-                board._undo_temp_move(move)
-                continue
-            score = -self.negamax(board, depth - 1, -beta, -alpha, ply + 1)
-            legal_move_found = True
-            if board.moveRuleTurns >= 50 or board.position_counts[board.position_key()] >= 3:
-                board._undo_temp_move(move)
-                return 0
-            board._undo_temp_move(move)
+            try:
+                if board.in_check(board.turn%2==1):
+                    board._undo_temp_move(move)
+                    continue
+                legal_move_found = True
+                if board.moveRuleTurns >= 50 or board.position_counts[board.position_key()] >= 3:
+                    board._undo_temp_move(move)
 
-            if score > value:
-                value = score
-                best_move = move
+                    if 0 > value:
+                        value = 0
+                        best_move = move
+                    continue
+                score = -self.negamax(board, depth - 1, -beta, -alpha, ply + 1)
+                board._undo_temp_move(move)
 
-            alpha = max(alpha, value)
-            if alpha >= beta:
-                break
+                if score > value:
+                    value = score
+                    best_move = move
+
+                alpha = max(alpha, value)
+                if alpha >= beta:
+                    break
+            except:
+                board._undo_temp_move(move)
+                raise
 
         if not legal_move_found:
             if board.in_check(board.turn % 2 == 0):
@@ -160,6 +138,7 @@ class SearchEngine:
         return sorted(moves, key=score_moves, reverse=True)
 
     def quiescence_search(self, board, alpha, beta, ply):
+        self._check_time()
         stand_pat = evaluate(board, False)
 
         if stand_pat >= beta:
@@ -175,22 +154,25 @@ class SearchEngine:
         for move in tactical:
             self.nodes += 1
             board._apply_temp_move(move)
-            if board.in_check(board.turn%2==1):
+            try:
+                if board.in_check(board.turn%2==1):
+                    board._undo_temp_move(move)
+                    continue
+                score = -self.quiescence_search(board, -beta, -alpha, ply + 1)
                 board._undo_temp_move(move)
-                continue
-            score = -self.quiescence_search(board, -beta, -alpha, ply + 1)
-            board._undo_temp_move(move)
 
-            if score >= beta:
-                return beta
-            if score > alpha:
-                alpha = score
+                if score >= beta:
+                    return beta
+                if score > alpha:
+                    alpha = score
+            except:
+                board._undo_temp_move(move)
+                raise
 
         return alpha
 
-    def iterative_deepening(self, board, max_depth=None):
-        if max_depth is None:
-            max_depth = self.max_depth
+    def iterative_deepening(self, board):
+        max_depth = self.max_depth
 
         best_move = None
         best_value = -math.inf
@@ -210,6 +192,7 @@ class SearchEngine:
         return best_move
 
     def _search_root(self, board, depth):
+        self._check_time()
         best_move = None
         best_value = -math.inf
 
@@ -222,22 +205,67 @@ class SearchEngine:
         legal_move_found = False
         for move in moves:
             board._apply_temp_move(move)
-            if board.in_check(board.turn%2==1):
+            try:
+                if board.in_check(board.turn%2==1):
+                    board._undo_temp_move(move)
+                    continue
+                value = -self.negamax(board, depth - 1, -beta, -alpha, 1)
                 board._undo_temp_move(move)
-                continue
-            value = -self.negamax(board, depth - 1, -beta, -alpha, 1)
-            board._undo_temp_move(move)
-            legal_move_found = True
-            if value > best_value:
-                best_value = value
-                best_move = move
+                legal_move_found = True
+                if value > best_value:
+                    best_value = value
+                    best_move = move
 
-            alpha = max(alpha, best_value)
+                alpha = max(alpha, best_value)
+            except:
+                board._undo_temp_move(move)
+                raise
 
         if not legal_move_found:
             return -math.inf, None
 
         return best_value, best_move
+
+    def _check_time(self):
+        if not self.max_time:
+            return
+        if time.perf_counter() >= self._deadline:
+            raise SearchTimeout()
+
+    def iterative_deepening_time(self, board):
+        root_moves = board.generate_legal_moves(board.turn % 2 == 0)
+        if not root_moves:
+            return None
+
+        start = time.perf_counter()
+        self._deadline = start + float(self.max_time)
+
+        best_move = root_moves[0]  # fallback
+        best_value = -math.inf
+
+        depth = 1
+        while True:
+            try:
+                value_d, move_d = self._search_root(board, depth)
+
+                if move_d is not None:
+                    best_move, best_value = move_d, value_d
+
+                depth += 1
+
+                if depth > 64:
+                     break
+
+            except SearchTimeout:
+                break
+
+        if best_move is not None:
+            best_value = best_value if board.turn % 2 == 0 else -best_value
+            print(f"Evaluation: {best_value}")
+        else:
+            print(f"Evaluation: No legal moves (checkmate/stalemate)")
+
+        return best_move
 
 @dataclass
 class TranspositionTableEntry:

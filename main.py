@@ -59,7 +59,11 @@ class Game:
 
         self.config = config
 
-        self.engine = SearchEngine(self.config.depth)
+        if self.config.engine_mode == "depth":
+            self.engine = SearchEngine(max_depth=self.config.depth, max_time=None)
+        else:
+            self.engine = SearchEngine(max_time=self.config.time_limit, max_depth=None)
+
 
     def run(self):
         while self.running:
@@ -297,7 +301,7 @@ class Game:
         if not self.is_engine_turn():
             return
 
-        move = self.engine.choose_move(self.board, True)
+        move = self.engine.choose_move(self.board)
         self.board._apply_temp_move(move)
         if self.board.game_end() != 0:
             self.game_over = True

@@ -176,7 +176,7 @@ def run_home_screen(screen, clock) -> GameConfig:
             if start_btn.clicked(event):
                 cfg.white_player = white_t.value
                 cfg.black_player = black_t.value
-                cfg.mode = mode_t.value
+                cfg.engine_mode = mode_t.value
                 cfg.depth = depth_s.value
                 cfg.time_limit = time_s.value
                 return cfg
