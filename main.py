@@ -1,5 +1,7 @@
-import pygame
+from dataclasses import dataclass
 
+import pygame
+import dataclasses
 from Engine.search import SearchEngine
 from board import *
 from piece import *
@@ -22,6 +24,15 @@ UNICODE = {
 GAME_END_STATE = {
     1: "Checkmate!", 2: "Stalemate!", 3: "Draw by 50 move rule", 4: "Draw by 3 fold repetition"
 }
+
+@dataclass
+class GameConfig:
+    white_player: str = "engine" # "human" or "engine"
+    black_player: str = "engine"
+
+    engine_mode: str = "depth" # "depth" or "time"
+    depth: int = 4
+    time_limit: float = 3 # seconds per move
 
 class Square:
     def __init__(self, row, col):
@@ -55,14 +66,16 @@ class Game:
         self.promotion_choices = ["Q", "R", "B", "N"]
         self.promotion_rects = {}
 
-        self.engine = SearchEngine()
+        self.config = GameConfig()
+
+        self.engine = SearchEngine(self.config.depth)
 
     def run(self):
         while self.running:
             self.clock.tick(FPS)
             self.handle_events()
-            self.do_engine_move_if_needed()
             self.render()
+            self.do_engine_move_if_needed()
 
         pygame.quit()
     # ---------- Input ----------
@@ -284,9 +297,8 @@ class Game:
         self.screen.blit(msg, (start_x, y - 40))
 
     def is_engine_turn(self) -> bool:
-        if self.board.turn%2 == 0: #Temporarily engine will be black
-            return False
-        return True
+        white_to_move = self.board.turn%2 == 0
+        return self.config.white_player == "engine" if white_to_move else self.config.black_player == "engine"
 
     def do_engine_move_if_needed(self):
         if self.game_over or self.promotion_pending_ui:
