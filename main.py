@@ -1,7 +1,5 @@
-from dataclasses import dataclass
 from homeScreen import run_home_screen, GameConfig
 import pygame
-import dataclasses
 from Engine.search import SearchEngine
 from board import *
 from piece import *
@@ -73,12 +71,16 @@ class Game:
             self.do_engine_move_if_needed()
 
         pygame.quit()
+
     # ---------- Input ----------
     def handle_events(self):
         for event in pygame.event.get():
+
             if event.type == pygame.QUIT:
                 self.running = False
+
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+
                 if self.promotion_pending_ui:
                     choice = self.get_promotion_choice_from_click(pygame.mouse.get_pos())
                     if choice:
@@ -94,9 +96,11 @@ class Game:
                 sq = self.mouse_to_square(pygame.mouse.get_pos())
                 if sq:
                     self.on_click_square(sq)
+
             elif event.type == pygame.KEYDOWN and self.game_over:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
+
                 elif event.key == pygame.K_r:
                     self.board = Board()
                     self.selected = None
@@ -149,13 +153,17 @@ class Game:
             # success: clear selection
             self.selected_from = None
             self.selected = None
-            if self.board.game_end() != 0:
+
+            state = self.board.game_end()
+            if state != 0:
                 self.game_over = True
-                self.game_over_text = "Checkmate!" if self.board.game_end() == 1 else "Draw!"
+                self.game_over_text = GAME_END_STATE.get(state)
+
         elif moved == "PROMOTION":
             self.promotion_pending_ui = True
             self.selected = None
             self.selected_from = None
+
         else:
             # failed: either keep selection, or switch selection to clicked piece
             clicked_piece = self.board.boardList[y][x]
@@ -173,12 +181,16 @@ class Game:
     # ---------- Rendering ----------
     def render(self):
         self.draw_board()
+
         if self.promotion_pending_ui:
             self.draw_promotion_overlay()
+
         self.draw_selection()
         self.draw_pieces()
+
         if self.game_over:
             self.draw_game_over_popup()
+
         pygame.display.flip()
 
     def draw_board(self):
@@ -207,9 +219,9 @@ class Game:
         for move in moves:
             x, y = move.newPos[0], move.newPos[1]
             rect = pygame.Rect(x * SQ_SIZE, y * SQ_SIZE, SQ_SIZE, SQ_SIZE)
-            if move.typeOfMove == 4 or move.typeOfMove == 2:
+            if move.typeOfMove == 4 or move.typeOfMove == 2: # Capture and En-Passant
                 pygame.draw.rect(self.screen, CAPTURE_HIGHLIGHT, rect, 4)
-            elif move.typeOfMove == 3 and move.oldPos[0] != move.newPos[0]:
+            elif move.typeOfMove == 3 and move.oldPos[0] != move.newPos[0]: # Promotion Capture
                 pygame.draw.rect(self.screen, CAPTURE_HIGHLIGHT, rect, 4)
             else:
                 pygame.draw.rect(self.screen, MOVE_HIGHLIGHT, rect, 4)
@@ -254,7 +266,6 @@ class Game:
         pygame.draw.rect(self.screen, (245, 245, 245), box, border_radius=16)
         pygame.draw.rect(self.screen, (40, 40, 40), box, 3, border_radius=16)
 
-
         title = self.big_font.render(self.game_over_text, True, (20, 20, 20))
         hint = self.small_font.render("Press R to restart  •  Esc to quit", True, (40, 40, 40))
 
@@ -291,6 +302,7 @@ class Game:
         msg = self.small_font.render("Choose promotion:", True, (255, 255, 255))
         self.screen.blit(msg, (start_x, y - 40))
 
+    # ---------- Engine ----------
     def is_engine_turn(self) -> bool:
         white_to_move = self.board.turn%2 == 0
         return self.config.white_player == "engine" if white_to_move else self.config.black_player == "engine"
@@ -302,7 +314,12 @@ class Game:
             return
 
         move = self.engine.choose_move(self.board)
+
+        # Use _apply_temp_move instead of board.move here to execute an engine move
+        # without triggering the UI promotion flow; promotion is handled explicitly
+        # engine produced promotion moves will already include promo_piece
         self.board._apply_temp_move(move)
+
         if self.board.game_end() != 0:
             self.game_over = True
             self.game_over_text = "Checkmate!" if self.board.game_end() == 1 else "Draw!"

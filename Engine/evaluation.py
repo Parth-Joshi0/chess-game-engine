@@ -1,9 +1,9 @@
-from dataclasses import dataclass
 from board import Board, Move
 
 WHITE = True
 BLACK = False
 
+# Evaluation bonuses/penalties (in centipawns)
 KING_PAWN_SHIELD_BONUS = 15
 DOUBLED_PAWN_PENALTY = -20
 ROOK_OPEN_FILE_BONUS = 25
@@ -11,34 +11,13 @@ ROOK_SEMI_OPEN_FILE_BONUS = 15
 
 MAX_MULT_BONUS = 0.6
 
-def clamp(x: float, lo: float, hi: float) -> float:
-    return lo if x < lo else hi if x > hi else x
-
-def mirrored_y(colour: bool, y: int):
-    return y if colour == WHITE else 7 - y
-
-def is_castled_square(colour: bool, x: int, y: int) -> bool:
-    return (
-            (colour == WHITE and (x, y) in [(6, 0), (2, 0)]) or
-            (colour == BLACK and (x, y) in [(6, 7), (2, 7)])
-    )
-
-@dataclass
-class EvalBreakdown:
-    material: int = 0
-    pst: int = 0
-    king: int = 0
-
-    @property
-    def total(self) -> int:
-        return self.material + self.pst + self.king
-
-def evaluate(board: Board, debug: bool) -> int | tuple[int, EvalBreakdown]:
+def evaluate(board: Board, debug: bool) -> int:
     score = board.eval
 
     white_moves = board.get_pseudo_legal_moves(WHITE)
     black_moves = board.get_pseudo_legal_moves(BLACK)
 
+    # Relative Move Bonus
     score += 2*(len(white_moves) - len(black_moves))
 
     score += board.mg * king_safety(board)
@@ -51,17 +30,13 @@ def evaluate(board: Board, debug: bool) -> int | tuple[int, EvalBreakdown]:
         return score
     return score
 
-def terminal_eval(state, ply):
-    if state != 1:
-        return 0
-    else:
-        return -1000000000 + ply
-
 def king_safety(board):
+    # Calculates king safety based on amount of pawns in front of king
     score = 0
 
     kx, ky = board.whiteKing.pos
 
+    # White king safety
     y = ky - 1
     if y >= 0:
         for dx in (-1, 0, 1):
@@ -75,6 +50,7 @@ def king_safety(board):
 
     kx, ky = board.blackKing.pos
 
+    # Black King Safety
     y = ky + 1
     if y < 8:
         for dx in (-1, 0, 1):
@@ -89,7 +65,7 @@ def king_safety(board):
     return score
 
 def file_bonuses(board):
-    #Caluclates Double Pawn Penalty, Bishop Pair Bonus and Open File for rooks bonuses
+    # Calculates Double Pawn Penalty, Bishop Pair Bonus and Open File for rooks bonuses
     white_pawns_per_file = [0] * 8
     black_pawns_per_file = [0] * 8
 
@@ -125,6 +101,7 @@ def file_bonuses(board):
             score += (wp - 1) * DOUBLED_PAWN_PENALTY
         if bp > 1:
             score -= (bp - 1) * DOUBLED_PAWN_PENALTY
+
         if wp == 0 and bp == 0:
             score += white_rooks_per_file[i] * ROOK_OPEN_FILE_BONUS
             score -= black_rooks_per_file[i] * ROOK_OPEN_FILE_BONUS

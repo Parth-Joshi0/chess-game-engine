@@ -3,6 +3,7 @@ from piece import *
 from collections import defaultdict
 
 def num_to_chess_notation(pos):
+    # Convert Internal Coordinates to Algebraic Notation (0, 0) -> a8
     x, y = pos
     file_letter = chr(ord('a') + x)
     rank_number = 8 - y
@@ -13,8 +14,8 @@ class Move:
         self.oldPos = oldPos
         self.newPos = newPos
         self.piece = piece
-        self.piece2 = piece2
-        self.typeOfMove = typeOfMove #0 for regular moving move, 1 for castling, 2 for enPassant, 3 for Promotion, 4 for capture
+        self.piece2 = piece2 # Captured Piece or Rook for Castling
+        self.typeOfMove = typeOfMove # 0=regular , 1=castling, 2=enPassant, 3=Promotion, 4=capture
         self.piece2OldPos = (-1,-1)
         self.piece2NewPos = (-1,-1)
         self.promo_piece = promo_piece
@@ -36,7 +37,7 @@ class Board:
         self.blackKing = None
 
         self.turn = 0
-        self.moveRuleTurns = 0
+        self.moveRuleTurns = 0 # 50 move rule counter
 
         self.boardList : list[list[Piece | None]] = [[None for _ in range(8)] for _ in range(8)]
 
@@ -94,6 +95,7 @@ class Board:
             self.boardList[1][i] = bp
             self.blackPieces.append(bp)
 
+    # ---------- Move Generation ----------
     def get_pseudo_legal_moves_by_piece(self, piece : Piece) -> list[Move]:
         moves = []
         if piece.name == "king":
@@ -133,17 +135,17 @@ class Board:
         start_row = 6 if piece.colour else 1
         promotion_row = 0 if piece.colour else 7
 
-        #1 square forward
+        # 1 square forward
         y1 = y + direction
         if 0 <= y1 <= 7 and self.boardList[y1][x] is None:
             moves.append(Move((x, y), (x, y1), piece))
 
-            #2 squares forward
+            # 2 squares forward
             y2 = y + 2 * direction
             if y == start_row and self.boardList[y2][x] is None:
                 moves.append(Move((x, y), (x, y2), piece))
 
-        #captures
+        # captures
         for dx in (-1, 1):
             x2 = x + dx
             y2 = y + direction
@@ -153,7 +155,7 @@ class Board:
                     moves.append(Move((x, y), (x2, y2), piece, piece2=target, typeOfMove=4))
 
         extraPromos = []
-        #promotion flag
+        # promotion flag
         for m in moves:
             if m.newPos[1] == promotion_row:
                 m.typeOfMove = 3  # promotion
@@ -184,6 +186,8 @@ class Board:
         return moves
 
     def ray_moves(self, piece: Piece, directions) -> list[Move]:
+        # Generate sliding piece moves in given directions until blocked
+        # For Queens, Rooks, Bishops
         moves = []
         x1, y1 = piece.pos
 
@@ -208,6 +212,8 @@ class Board:
         return moves
 
     def basic_moves(self, piece: Piece) -> list[Move]:
+        # Convert piece's available squares to Move objects, checking for captures
+        # For Kings and Knights
         moves = piece.moves_available()
         legals = []
         x1 = piece.pos[0]
@@ -223,15 +229,17 @@ class Board:
         return legals
 
     def castling_moves(self, piece: Piece) -> list[Move]:
-        king = self.whiteKing if piece.colour else self.blackKing
+        king = piece
         row = 7 if piece.colour else 0
         if king.hasMoved:
             return []
 
-        rook1 = self.boardList[row][0]
-        rook2 = self.boardList[row][7]
+        rook1 = self.boardList[row][0] # Queen side Rook
+        rook2 = self.boardList[row][7] # King side Rook
 
         moves = []
+
+        # Queen Side Castling
         if rook1 and rook1.name == "rook" and not rook1.hasMoved:
             empty = self.boardList[row][1] is None and self.boardList[row][2] is None and self.boardList[row][3] is None
             attacked = self.is_square_attacked(4, row, not piece.colour) or self.is_square_attacked(2, row, not piece.colour) or self.is_square_attacked(3, row, not piece.colour)
@@ -241,6 +249,7 @@ class Board:
                 move.piece2OldPos = rook1.pos
                 moves.append(move)
 
+        # King Side Castling
         if rook2 and rook2.name == "rook" and not rook2.hasMoved:
             empty = self.boardList[row][5] is None and self.boardList[row][6] is None
             attacked = self.is_square_attacked(5, row, not piece.colour) or self.is_square_attacked(6, row, not piece.colour) or self.is_square_attacked(4, row, not piece.colour)
@@ -252,8 +261,35 @@ class Board:
 
         return moves
 
+    def get_legal_moves_by_piece(self, piece: Piece):
+        pseudo = self.get_pseudo_legal_moves_by_piece(piece)
+        legal = []
+
+        for mv in pseudo:
+            self._apply_temp_move(mv)
+            if not self.in_check(piece.colour):
+                legal.append(mv)
+            self._undo_temp_move(mv)
+
+        return legal
+
+    def generate_legal_moves(self, colour: bool):
+        pieceList = self.whitePieces if colour else self.blackPieces
+        moves = []
+        for piece in pieceList:
+            moves += self.get_legal_moves_by_piece(piece)
+        return moves
+
+    def get_pseudo_legal_moves(self, colour: bool):
+        pieceList = self.whitePieces if colour else self.blackPieces
+        moves = []
+        for piece in pieceList:
+            moves += self.get_pseudo_legal_moves_by_piece(piece)
+        return moves
+
+    # ---------- Move Execution ----------
     def move(self, move: Move) -> str:
-        # reset any prior promotion state
+        # Reset any prior promotion state
         self.promotionPiece = None
 
         # Validate move against legal moves for that piece
@@ -287,107 +323,54 @@ class Board:
 
         return "VALID_MOVE"
 
-    def is_square_attacked(self, x: int, y: int, by_colour: bool) -> bool:
-        def in_bounds(cx, cy):
-            return 0 <= cx <= 7 and 0 <= cy <= 7
-
-        #Pawn attacks
-        pawn_dir = 1 if by_colour else -1
-        for dx in (-1, 1):
-            ax, ay = x + dx, y + pawn_dir
-            if in_bounds(ax, ay):
-                p = self.boardList[ay][ax]
-                if p is not None and p.colour == by_colour and p.name == "pawn":
-                    return True
-
-        #Knight attacks
-        knight_offsets = [(2, 1), (2, -1), (-2, 1), (-2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2)]
-        for dx, dy in knight_offsets:
-            ax, ay = x + dx, y + dy
-            if in_bounds(ax, ay):
-                p = self.boardList[ay][ax]
-                if p is not None and p.colour == by_colour and p.name == "knight":
-                    return True
-
-        #King Attacks: No castling checks
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                if dx == 0 and dy == 0:
-                    continue
-                ax, ay = x + dx, y + dy
-                if in_bounds(ax, ay):
-                    p = self.boardList[ay][ax]
-                    if p is not None and p.colour == by_colour and p.name == "king":
-                        return True
-
-        #Rook & Queen Attacks
-        rook_dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)]
-        for dx, dy in rook_dirs:
-            ax, ay = x + dx, y + dy
-            while in_bounds(ax, ay):
-                p = self.boardList[ay][ax]
-                if p is None:
-                    ax += dx
-                    ay += dy
-                    continue
-                # first piece on this ray blocks further
-                if p.colour == by_colour and (p.name == "rook" or p.name == "queen"):
-                    return True
-                break
-
-        #Bishop & Queen Attacks
-        bishop_dirs = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
-        for dx, dy in bishop_dirs:
-            ax, ay = x + dx, y + dy
-            while in_bounds(ax, ay):
-                p = self.boardList[ay][ax]
-                if p is None:
-                    ax += dx
-                    ay += dy
-                    continue
-                if p.colour == by_colour and (p.name == "bishop" or p.name == "queen"):
-                    return True
-                break
-        return False
-
-    def in_check(self, colour: bool):
-        king = self.whiteKing if colour else self.blackKing
-        return self.is_square_attacked(king.pos[0], king.pos[1], not colour)
-
-    def get_legal_moves_by_piece(self, piece: Piece):
-        pseudo = self.get_pseudo_legal_moves_by_piece(piece)
-        legal = []
-
-        for mv in pseudo:
-            self._apply_temp_move(mv)
-            if not self.in_check(piece.colour):
-                legal.append(mv)
-            self._undo_temp_move(mv)
-
-        return legal
-
-    def _remove_piece_from_list(self, piece):
-        if piece is None:
+    def finalize_promotion(self, choice):
+        # Complete a promotion after UI selection
+        pawn = self.promotionPiece
+        if pawn is None:
             return
-        if piece.colour:
-            if piece not in self.whitePieces:
-                print("REMOVE FAIL:", piece.name, piece.pos, "white")
-                print("whitePieces has:", [(p.name, p.pos) for p in self.whitePieces])
-                raise ValueError("Piece not in whitePieces")
-            self.whitePieces.remove(piece)
-        else:
-            if piece not in self.blackPieces:
-                print("REMOVE FAIL:", piece.name, piece.pos, "black")
-                raise ValueError("Piece not in blackPieces")
-            self.blackPieces.remove(piece)
 
-    def _add_piece_to_list(self, piece):
-        if piece is None:
-            return
-        if piece.colour:
-            self.whitePieces.append(piece)
-        else:
-            self.blackPieces.append(piece)
+        colour = pawn.colour
+        x1, y1 = pawn.pos
+        x2, y2 = self.promotionSquare
+
+        match choice:
+            case "Q":
+                promo = Queen(colour, x2, y2)
+            case "N":
+                promo = Knight(colour, x2, y2)
+            case "B":
+                promo = Bishop(colour, x2, y2)
+            case "R":
+                promo = Rook(colour, x2, y2)
+            case _:
+                return
+
+        captured = self.boardList[y2][x2]
+
+        # Update Evaluation
+        promo_delta = 0
+        promo_delta -= pawn.piece_worth()
+        promo_delta += promo.piece_worth()
+        promo_delta -= self.pst_value(pawn, x1, y1)
+        promo_delta += self.pst_value(promo, x2, y2)
+        if captured is not None:
+            promo_delta -= captured.piece_worth()
+            promo_delta -= self.pst_value(captured, x2, y2)
+
+        self.boardList[y1][x1] = None
+        self.boardList[y2][x2] = promo
+
+        self._remove_piece_from_list(pawn)
+        if captured is not None:
+            self._remove_piece_from_list(captured)
+        self._add_piece_to_list(promo)
+
+        self.eval += promo_delta
+        self.turn += 1
+        self.position_counts[self.position_key()] += 1
+
+        self.promotionPiece = None
+        self.promotionSquare = None
 
     def _apply_temp_move(self, move: Move):
         move._temp_eval_delta = 0
@@ -462,7 +445,7 @@ class Board:
 
             self.eval += move._temp_eval_delta
             self.mg, self.eg = self.phase_weights()
-            return  #Exit early for promotions
+            return  # Exit early for promotions
 
         # NORMAL MOVES (non-promotion)
         self.boardList[y1][x1] = None
@@ -546,7 +529,7 @@ class Board:
             self.boardList[y1][x1] = pawn
             pawn.pos = move._temp_old_pos
 
-            #ADD PAWN BACK TO PIECE LIST
+            # ADD PAWN BACK TO PIECE LIST
             self._add_piece_to_list(pawn)
 
             if move._temp_hasMoved is not None:
@@ -602,7 +585,102 @@ class Board:
         del move._temp_old_pos
         del move._temp_hasMoved
 
-    def game_end(self, moves=None) -> int: #0 for game not ended, 1 for checkmate, 2 for stalemate, 3 for 50 move rule draw, 4 for 3fold repetion
+    # ---------- Attack Detection ----------
+    def is_square_attacked(self, x: int, y: int, by_colour: bool) -> bool:
+        # Check if a square is attacked by a given colour
+        def in_bounds(cx, cy):
+            return 0 <= cx <= 7 and 0 <= cy <= 7
+
+        # Pawn attacks
+        pawn_dir = 1 if by_colour else -1
+        for dx in (-1, 1):
+            ax, ay = x + dx, y + pawn_dir
+            if in_bounds(ax, ay):
+                p = self.boardList[ay][ax]
+                if p is not None and p.colour == by_colour and p.name == "pawn":
+                    return True
+
+        # Knight attacks
+        knight_offsets = [(2, 1), (2, -1), (-2, 1), (-2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2)]
+        for dx, dy in knight_offsets:
+            ax, ay = x + dx, y + dy
+            if in_bounds(ax, ay):
+                p = self.boardList[ay][ax]
+                if p is not None and p.colour == by_colour and p.name == "knight":
+                    return True
+
+        # King Attacks: No castling checks
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                if dx == 0 and dy == 0:
+                    continue
+                ax, ay = x + dx, y + dy
+                if in_bounds(ax, ay):
+                    p = self.boardList[ay][ax]
+                    if p is not None and p.colour == by_colour and p.name == "king":
+                        return True
+
+        # Rook & Queen Attacks
+        rook_dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        for dx, dy in rook_dirs:
+            ax, ay = x + dx, y + dy
+            while in_bounds(ax, ay):
+                p = self.boardList[ay][ax]
+                if p is None:
+                    ax += dx
+                    ay += dy
+                    continue
+                # First piece on this ray blocks further
+                if p.colour == by_colour and (p.name == "rook" or p.name == "queen"):
+                    return True
+                break
+
+        # Bishop & Queen Attacks
+        bishop_dirs = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+        for dx, dy in bishop_dirs:
+            ax, ay = x + dx, y + dy
+            while in_bounds(ax, ay):
+                p = self.boardList[ay][ax]
+                if p is None:
+                    ax += dx
+                    ay += dy
+                    continue
+                if p.colour == by_colour and (p.name == "bishop" or p.name == "queen"):
+                    return True
+                break
+        return False
+
+    def in_check(self, colour: bool):
+        king = self.whiteKing if colour else self.blackKing
+        return self.is_square_attacked(king.pos[0], king.pos[1], not colour)
+
+    # ---------- Piece List Management ----------
+    def _remove_piece_from_list(self, piece):
+        if piece is None:
+            return
+        if piece.colour:
+            if piece not in self.whitePieces:
+                print("REMOVE FAIL:", piece.name, piece.pos, "white")
+                print("whitePieces has:", [(p.name, p.pos) for p in self.whitePieces])
+                raise ValueError("Piece not in whitePieces")
+            self.whitePieces.remove(piece)
+        else:
+            if piece not in self.blackPieces:
+                print("REMOVE FAIL:", piece.name, piece.pos, "black")
+                raise ValueError("Piece not in blackPieces")
+            self.blackPieces.remove(piece)
+
+    def _add_piece_to_list(self, piece):
+        if piece is None:
+            return
+        if piece.colour:
+            self.whitePieces.append(piece)
+        else:
+            self.blackPieces.append(piece)
+
+    # ---------- Game State ----------
+    def game_end(self, moves=None) -> int:
+        # 0=Ongoing, 1=checkmate, 2=stalemate, 3=50 move rule draw, 4=3fold repetition
         colour = True if self.turn % 2 == 0 else False
         pieces = self.whitePieces if colour else self.blackPieces
         king = self.whiteKing if colour else self.blackKing
@@ -626,58 +704,12 @@ class Board:
 
         return 2
 
-    def finalize_promotion(self, choice):
-        pawn = self.promotionPiece
-        if pawn is None:
-            return
-
-        colour = pawn.colour
-        x1, y1 = pawn.pos
-        x2, y2 = self.promotionSquare
-
-        match choice:
-            case "Q":
-                promo = Queen(colour, x2, y2)
-            case "N":
-                promo = Knight(colour, x2, y2)
-            case "B":
-                promo = Bishop(colour, x2, y2)
-            case "R":
-                promo = Rook(colour, x2, y2)
-            case _:
-                return
-
-        captured = self.boardList[y2][x2]
-
-        promo_delta = 0
-        promo_delta -= pawn.piece_worth()
-        promo_delta += promo.piece_worth()
-        promo_delta -= self.pst_value(pawn, x1, y1)
-        promo_delta += self.pst_value(promo, x2, y2)
-        if captured is not None:
-            promo_delta -= captured.piece_worth()
-            promo_delta -= self.pst_value(captured, x2, y2)
-
-        self.boardList[y1][x1] = None
-        self.boardList[y2][x2] = promo
-
-        self._remove_piece_from_list(pawn)
-        if captured is not None:
-            self._remove_piece_from_list(captured)
-        self._add_piece_to_list(promo)
-
-        self.eval += promo_delta
-        self.turn += 1
-        self.position_counts[self.position_key()] += 1
-
-        self.promotionPiece = None
-        self.promotionSquare = None
-
+    # ---------- Position Hashing ----------
     def position_key(self) -> bytes:
-        #Stores the position in a bit key, the first bit is the side to move,
-        #The next 4 bits are the castling rights, (white king, white queen, black king, black queen)
-        #The next 8 bits are the target square for en-passant (x, y) - all 1's if it is none
-        #The next 256 bits are the pieces, each mapped to a seperate code, where the first bit is the colour
+        # Stores the position in a bit key, the first bit is the side to move,
+        # The next 4 bits are the castling rights, (white king, white queen, black king, black queen)
+        # The next 8 bits are the target square for en-passant (x, y) - all 1's if it is none
+        # The next 256 bits are the pieces, each mapped to a seperate code, where the first bit is the colour
 
         MAPPING = {
             "king": "110",
@@ -727,21 +759,9 @@ class Board:
 
         return int(bitstr, 2).to_bytes(len(bitstr) // 8, byteorder="big")
 
-    def generate_legal_moves(self, colour: bool):
-        pieceList = self.whitePieces if colour else self.blackPieces
-        moves = []
-        for piece in pieceList:
-            moves += self.get_legal_moves_by_piece(piece)
-        return moves
-
-    def get_pseudo_legal_moves(self, colour: bool):
-        pieceList = self.whitePieces if colour else self.blackPieces
-        moves = []
-        for piece in pieceList:
-            moves += self.get_pseudo_legal_moves_by_piece(piece)
-        return moves
-
+    # ---------- Evaluation Helpers ----------
     def pst_value(self, piece, x: int, y: int) -> int:
+        # Get Piece-Square Table bonus for a given piece at a given position
         endgame_table = ENDGAME_PIECE_SQUARE_TABLE.get(piece.name)
         middlegame_table = MIDDLEGAME_PIECE_SQUARE_TABLE.get(piece.name)
         ty = (7 - y) if piece.colour == WHITE else y
@@ -751,6 +771,7 @@ class Board:
         return bonus if piece.colour == WHITE else -bonus
 
     def phase_weights(self) -> tuple[float, float]:
+        # Calculate middlegame/endgame phase weights based on material
         mg = 0.0
 
         for p in self.whitePieces:

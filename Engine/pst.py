@@ -1,3 +1,7 @@
+# Piece-Square Tables for positional evaluation
+# Higher values indicate better squares for pieces
+# Tables are from White's perspective (row 0 = rank 8, row 7 = rank 1)
+
 PAWN_POS_BONUS = [
     [0, 0, 0, 0, 0, 0, 0, 0],
     [8, 8, 8, 8, 8, 8, 8, 8],

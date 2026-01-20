@@ -35,6 +35,7 @@ class Button:
         )
 
 class Toggle:
+    # Clickable option select that cycles through options
     def __init__(self, rect, label, options, font, value=None):
         self.rect = pygame.Rect(rect)
         self.label = label
@@ -53,6 +54,7 @@ class Toggle:
         screen.blit(val_img, val_img.get_rect(center=self.rect.center))
 
     def handle(self, event):
+        # Cycle to next option on click
         if (
             event.type == pygame.MOUSEBUTTONDOWN
             and event.button == 1
@@ -64,6 +66,7 @@ class Toggle:
         return False
 
 class Slider:
+    # Slider for numeric values (Time)
     def __init__(self, x, y, w, min_v, max_v, value, font, label, is_int=True):
         self.track = pygame.Rect(x, y, w, 10)
         self.min_v = min_v
@@ -76,14 +79,17 @@ class Slider:
         self.knob_r = 12
 
     def _t(self):
+        # Get normalized position (0 to 1) of current value
         return (self.value - self.min_v) / (self.max_v - self.min_v)
 
     def _knob_pos(self):
+        # Calculate Pixel Position of slider knob
         x = int(self.track.x + self._t() * self.track.w)
         y = self.track.centery
         return x, y
 
     def _set_from_mouse(self, mx):
+        # Updates values based on mouse x position
         t = (mx - self.track.x) / self.track.w
         t = max(0.0, min(1.0, t))
         v = self.min_v + t * (self.max_v - self.min_v)
@@ -100,6 +106,7 @@ class Slider:
         pygame.draw.circle(screen, (40,40,40), (kx, ky), self.knob_r, 2)
 
     def handle(self, event):
+        # Handle mouse drag events
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             kx, ky = self._knob_pos()
             if self.track.collidepoint(event.pos) or (
@@ -120,6 +127,7 @@ class Slider:
         return False
 
 def run_home_screen(screen, clock) -> GameConfig:
+    # Display Configuration Menu and Return game Settings
     title_font = pygame.font.SysFont("arialunicode", 56)
     font = pygame.font.SysFont("arialunicode", 26)
     small = pygame.font.SysFont("arialunicode", 20)
