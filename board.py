@@ -2,6 +2,7 @@ from Engine.pst import ENDGAME_PIECE_SQUARE_TABLE, MIDDLEGAME_PIECE_SQUARE_TABLE
 from piece import *
 from collections import defaultdict
 import sys
+import zobrist
 
 STARTING_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
@@ -81,6 +82,15 @@ class Board:
         self.mg, self.eg = self.phase_weights()
         self.eval = sum(p.piece_worth() + self.pst_value(p, *p.pos)
                         for p in self.whitePieces + self.blackPieces)
+
+        # Zobrist hash of just the piece placement, maintained incrementally by every
+        # move/unmove from here on. Side to move, castling rights and en-passant are cheap
+        # to derive on demand, so position_key() layers them on rather than tracking them
+        # here too.
+        self.zobrist_pieces = 0
+        for p in self.whitePieces + self.blackPieces:
+            self.zobrist_pieces ^= zobrist.piece_key(p, *p.pos)
+
         self.position_counts = defaultdict(int)
         self.position_counts[self.position_key()] = 1
 
@@ -538,6 +548,11 @@ class Board:
             self._remove_piece_from_list(captured)
         self._add_piece_to_list(promo)
 
+        self.zobrist_pieces ^= zobrist.piece_key(pawn, x1, y1)
+        if captured is not None:
+            self.zobrist_pieces ^= zobrist.piece_key(captured, x2, y2)
+        self.zobrist_pieces ^= zobrist.piece_key(promo, x2, y2)
+
         self.eval += promo_delta
         self.turn += 1
         self.position_counts[self.position_key()] += 1
@@ -614,6 +629,11 @@ class Board:
             if hasattr(promo, "hasMoved"):
                 promo.hasMoved = True
 
+            move._temp_zobrist_delta = zobrist.piece_key(piece, x1, y1) ^ zobrist.piece_key(promo, x2, y2)
+            if captured:
+                move._temp_zobrist_delta ^= zobrist.piece_key(captured, x2, y2)
+            self.zobrist_pieces ^= move._temp_zobrist_delta
+
             self.position_counts[self.position_key()] += 1
 
             self.eval += move._temp_eval_delta
@@ -624,10 +644,13 @@ class Board:
         self.boardList[y1][x1] = None
         move._temp_eval_delta += self.pst_value(piece, x2, y2)
 
+        move._temp_zobrist_delta = zobrist.piece_key(piece, x1, y1) ^ zobrist.piece_key(piece, x2, y2)
+
         if captured:
             self._remove_piece_from_list(captured)
             move._temp_eval_delta -= self.pst_value(captured, x2, y2)
             move._temp_eval_delta -= captured.piece_worth()
+            move._temp_zobrist_delta ^= zobrist.piece_key(captured, x2, y2)
             self.mg, self.eg = self.phase_weights()
 
         self.boardList[y2][x2] = piece
@@ -652,6 +675,8 @@ class Board:
             rook.pos = (rx2, ry2)
             rook.hasMoved = True
 
+            move._temp_zobrist_delta ^= zobrist.piece_key(rook, rx1, ry1) ^ zobrist.piece_key(rook, rx2, ry2)
+
         elif move.typeOfMove == 2:  # En passant
             px1, py1 = move.piece2OldPos
             ep_piece = self.boardList[py1][px1]
@@ -662,6 +687,10 @@ class Board:
 
             self.boardList[py1][px1] = None
             self._remove_piece_from_list(ep_piece)
+
+            move._temp_zobrist_delta ^= zobrist.piece_key(ep_piece, px1, py1)
+
+        self.zobrist_pieces ^= move._temp_zobrist_delta
 
         self.position_counts[self.position_key()] += 1
         self.eval += move._temp_eval_delta
@@ -677,12 +706,19 @@ class Board:
         # Drop keys that fall back to zero. defaultdict(int) still reads them as 0, but
         # leaving them in place grows the dict by one entry per search node (~9.5k for a
         # single depth-4 search) and it lives on the Board, so no TT clear would reclaim it.
+        # Must run before the zobrist/board-state restoration below: position_key() needs
+        # to see the post-move state here, matching what _apply_temp_move incremented.
         k = self.position_key()
         c = self.position_counts[k] - 1
         if c:
             self.position_counts[k] = c
         else:
             self.position_counts.pop(k, None)
+
+        # XOR is its own inverse, so re-applying the exact delta _apply_temp_move computed
+        # restores the pre-move piece hash regardless of how many pieces moved.
+        self.zobrist_pieces ^= move._temp_zobrist_delta
+        del move._temp_zobrist_delta
 
         # restore turn
         self.turn = move._temp_turn
@@ -890,52 +926,22 @@ class Board:
         return 2
 
     # ---------- Position Hashing ----------
-    def position_key(self) -> bytes:
-        # Stores the position in a bit key, the first bit is the side to move,
-        # The next 4 bits are the castling rights, (white king, white queen, black king, black queen)
-        # The next 8 bits are the target square for en-passant (x, y) - all 1's if it is none
-        # The next 256 bits are the pieces, each mapped to a seperate code, where the first bit is the colour
-
-        MAPPING = {
-            "king": "110",
-            "knight": "101",
-            "queen": "100",
-            "bishop": "011",
-            "rook": "010",
-            "pawn": "001",
-        }
-
-        bits = []
-        append = bits.append
-
-        append("1" if self.turn % 2 == 0 else "0")
-
+    def position_key(self) -> int:
+        # Zobrist hash: self.zobrist_pieces is the XOR of every piece's key and is kept
+        # up to date incrementally by every move/unmove (see _apply_temp_move /
+        # _undo_temp_move / finalize_promotion). Side to move, castling rights and
+        # en-passant are cheap (O(1)-O(4)) so they're layered on fresh each call instead
+        # of being tracked incrementally too -- that avoids having to reconstruct
+        # "what the en-passant/castling state was before this move" at the couple of call
+        # sites (finalize_promotion in particular) where it's already been overwritten by
+        # the time the hash would need updating.
+        key = self.zobrist_pieces
+        if self.turn % 2 == 1:
+            key ^= zobrist.SIDE_KEY
         # Shared with to_fen() so the hash and the FEN can never disagree about rights
-        for ok in self._castling_rights():
-            append("1" if ok else "0")
-
-        if self.enPassantTarget:
-            x, y = self.enPassantTarget
-            append(format(x, "04b"))
-            append(format(y, "04b"))
-        else:
-            append("11111111")
-
-        for y in range(8):
-            for x in range(8):
-                p = self.boardList[y][x]
-                if p is None:
-                    append("0000")
-                else:
-                    append(("1" if p.colour else "0") + MAPPING[p.name])
-
-        bitstr = "".join(bits)
-
-        pad = (-len(bitstr)) % 8
-        if pad:
-            bitstr += "0" * pad
-
-        return int(bitstr, 2).to_bytes(len(bitstr) // 8, byteorder="big")
+        key ^= zobrist.castling_component(self._castling_rights())
+        key ^= zobrist.en_passant_component(self.enPassantTarget)
+        return key
 
     # ---------- Evaluation Helpers ----------
     def pst_value(self, piece, x: int, y: int) -> int:

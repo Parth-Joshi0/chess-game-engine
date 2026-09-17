@@ -57,11 +57,10 @@ class SearchEngine:
         self.tt_used = 0
 
     def tt_index(self, key):
-        # position_key() packs the board from a8 down to h1 and zero-pads the tail, so its
-        # low bits are the h1 corner plus padding -- nearly constant across a search.
-        # Taking them modulo the table size put a whole depth-4 search into 6 slots.
-        # hash() on bytes is siphash: well distributed over the whole key.
-        return hash(key) % self.tt_size
+        # position_key() is now a Zobrist hash (see board.py / zobrist.py): every bit is
+        # the XOR of independent random 64-bit values, so it's already uniformly
+        # distributed and any slice of it (mod table size) is a good index.
+        return key % self.tt_size
 
     def tt_lookup(self, key):
         entry = self.transposition_table[self.tt_index(key)]
