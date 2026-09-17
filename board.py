@@ -1,6 +1,23 @@
 from Engine.pst import ENDGAME_PIECE_SQUARE_TABLE, MIDDLEGAME_PIECE_SQUARE_TABLE
 from piece import *
 from collections import defaultdict
+import sys
+
+STARTING_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+
+# The 50-move rule draws after 50 full moves, i.e. 100 plies. moveRuleTurns counts plies.
+HALFMOVE_DRAW_PLIES = 100
+
+# FEN letter -> piece class, and the reverse for serialisation
+FEN_PIECES = {"k": King, "q": Queen, "r": Rook, "b": Bishop, "n": Knight, "p": Pawn}
+FEN_LETTER = {"king": "k", "queen": "q", "rook": "r",
+              "bishop": "b", "knight": "n", "pawn": "p"}
+
+# Castling flag -> (king_x, king_y, rook_x, rook_y)
+CASTLE_SQUARES = {
+    "K": (4, 7, 7, 7), "Q": (4, 7, 0, 7),
+    "k": (4, 0, 7, 0), "q": (4, 0, 0, 0),
+}
 
 def num_to_chess_notation(pos):
     # Convert Internal Coordinates to Algebraic Notation (0, 0) -> a8
@@ -29,7 +46,7 @@ class Move:
         return f"Piece: ({self.piece.colour} {self.piece.name}), From: {num_to_chess_notation(self.oldPos)}, To: {num_to_chess_notation(self.newPos)}"
 
 class Board:
-    def __init__(self):
+    def __init__(self, fen: str | None = None):
         self.blackPieces = []
         self.whitePieces = []
 
@@ -46,12 +63,26 @@ class Board:
         self.promotionPiece = None
         self.promotionSquare = None
 
-        self.generate_board()
+        # Both paths must end with _recompute_derived(), which seeds eval / mg / eg /
+        # position_counts from whatever pieces are now on the board.
+        if fen is None:
+            self.generate_board()
+            self._recompute_derived()
+        else:
+            self.load_fen(fen)
 
+    @classmethod
+    def from_fen(cls, fen: str) -> "Board":
+        return cls(fen)
+
+    def _recompute_derived(self) -> None:
+        # Recompute every cached value that depends on the piece placement.
+        # phase_weights() must run first: pst_value() reads self.mg / self.eg.
+        self.mg, self.eg = self.phase_weights()
+        self.eval = sum(p.piece_worth() + self.pst_value(p, *p.pos)
+                        for p in self.whitePieces + self.blackPieces)
         self.position_counts = defaultdict(int)
         self.position_counts[self.position_key()] = 1
-        self.eval = 0
-        self.mg, self.eg = self.phase_weights()
 
     def generate_board(self):
         WHITE = True
@@ -94,6 +125,143 @@ class Board:
             bp = Pawn(BLACK, i, 1)  # col=i, row=1
             self.boardList[1][i] = bp
             self.blackPieces.append(bp)
+
+    # ---------- FEN ----------
+    def load_fen(self, fen: str) -> None:
+        # Replace the entire board state with the position described by a FEN string.
+        fields = fen.split()
+        if len(fields) < 2:
+            raise ValueError(f"FEN needs at least a placement and a side to move: {fen!r}")
+
+        placement = fields[0]
+        stm = fields[1]
+        castling = fields[2] if len(fields) > 2 else "-"
+        ep = fields[3] if len(fields) > 3 else "-"
+        halfmove = int(fields[4]) if len(fields) > 4 and fields[4].isdigit() else 0
+        fullmove = int(fields[5]) if len(fields) > 5 and fields[5].isdigit() else 1
+
+        if stm not in ("w", "b"):
+            raise ValueError(f"FEN side to move must be 'w' or 'b': {stm!r}")
+
+        ranks = placement.split("/")
+        if len(ranks) != 8:
+            raise ValueError(f"FEN placement needs 8 ranks, got {len(ranks)}: {placement!r}")
+
+        self.boardList = [[None for _ in range(8)] for _ in range(8)]
+        self.whitePieces = []
+        self.blackPieces = []
+        self.whiteKing = None
+        self.blackKing = None
+        self.promotionPiece = None
+        self.promotionSquare = None
+
+        # Rank 8 is listed first and is row 0, which matches boardList's ordering directly.
+        for y, rank in enumerate(ranks):
+            x = 0
+            for ch in rank:
+                if ch.isdigit():
+                    x += int(ch)
+                    continue
+                cls_ = FEN_PIECES.get(ch.lower())
+                if cls_ is None:
+                    raise ValueError(f"Unknown piece letter {ch!r} in FEN rank {rank!r}")
+                if x > 7:
+                    raise ValueError(f"FEN rank overflows 8 files: {rank!r}")
+
+                colour = ch.isupper()
+                p = cls_(colour, x, y)
+
+                # Castling rights are stored as hasMoved on the king/rook objects, so start
+                # from "no rights" and grant back only what the castling field allows.
+                if p.name in ("king", "rook"):
+                    p.hasMoved = True
+
+                self.boardList[y][x] = p
+                if colour:
+                    self.whitePieces.append(p)
+                    if p.name == "king":
+                        self.whiteKing = p
+                else:
+                    self.blackPieces.append(p)
+                    if p.name == "king":
+                        self.blackKing = p
+                x += 1
+
+            if x != 8:
+                raise ValueError(f"FEN rank does not describe 8 squares: {rank!r}")
+
+        # in_check() dereferences these unconditionally, so a kingless FEN would crash
+        # somewhere deep in the search rather than here.
+        if self.whiteKing is None or self.blackKing is None:
+            raise ValueError(f"FEN is missing a king: {fen!r}")
+
+        if castling != "-":
+            for flag, (kx, ky, rx, ry) in CASTLE_SQUARES.items():
+                if flag not in castling:
+                    continue
+                king = self.boardList[ky][kx]
+                rook = self.boardList[ry][rx]
+                want_white = flag.isupper()
+                # A right that doesn't match the pieces actually present is dropped rather
+                # than trusted; castling_moves() would otherwise move whatever is there.
+                if king is None or king.name != "king" or king.colour is not want_white:
+                    continue
+                if rook is None or rook.name != "rook" or rook.colour is not want_white:
+                    continue
+                king.hasMoved = False
+                rook.hasMoved = False
+
+        self.enPassantTarget = None
+        if ep != "-" and len(ep) >= 2:
+            self.enPassantTarget = (ord(ep[0]) - ord('a'), 8 - int(ep[1]))
+
+        self.moveRuleTurns = halfmove
+        self.turn = (max(1, fullmove) - 1) * 2 + (0 if stm == "w" else 1)
+
+        self._recompute_derived()
+
+    def _castling_rights(self) -> tuple[bool, bool, bool, bool]:
+        # (white kingside, white queenside, black kingside, black queenside).
+        # A right survives only if both the king and that specific rook are unmoved.
+        rights = []
+        for flag in ("K", "Q", "k", "q"):
+            kx, ky, rx, ry = CASTLE_SQUARES[flag]
+            king = self.boardList[ky][kx]
+            rook = self.boardList[ry][rx]
+            want_white = flag.isupper()
+            ok = (king is not None and king.name == "king" and king.colour is want_white
+                  and not king.hasMoved
+                  and rook is not None and rook.name == "rook" and rook.colour is want_white
+                  and not rook.hasMoved)
+            rights.append(ok)
+        return tuple(rights)
+
+    def to_fen(self) -> str:
+        # Serialise the current position back to a FEN string.
+        ranks = []
+        for y in range(8):
+            rank = ""
+            empty = 0
+            for x in range(8):
+                p = self.boardList[y][x]
+                if p is None:
+                    empty += 1
+                    continue
+                if empty:
+                    rank += str(empty)
+                    empty = 0
+                letter = FEN_LETTER[p.name]
+                rank += letter.upper() if p.colour else letter
+            if empty:
+                rank += str(empty)
+            ranks.append(rank)
+
+        placement = "/".join(ranks)
+        stm = "w" if self.turn % 2 == 0 else "b"
+        castling = "".join(c for c, ok in zip("KQkq", self._castling_rights()) if ok) or "-"
+        ep = num_to_chess_notation(self.enPassantTarget) if self.enPassantTarget else "-"
+
+        return f"{placement} {stm} {castling} {ep} {self.moveRuleTurns} {self.turn // 2 + 1}"
 
     # ---------- Move Generation ----------
     def get_pseudo_legal_moves_by_piece(self, piece : Piece) -> list[Move]:
@@ -276,13 +444,18 @@ class Board:
     def generate_legal_moves(self, colour: bool):
         pieceList = self.whitePieces if colour else self.blackPieces
         moves = []
-        for piece in pieceList:
+        # Snapshot the list: get_legal_moves_by_piece applies and undoes each move, and a
+        # promotion's undo re-appends the pawn at the end. Iterating the live list would
+        # shift later pieces left and skip one while visiting the pawn twice.
+        for piece in list(pieceList):
             moves += self.get_legal_moves_by_piece(piece)
         return moves
 
     def get_pseudo_legal_moves(self, colour: bool):
         pieceList = self.whitePieces if colour else self.blackPieces
         moves = []
+        # No snapshot needed here (and this is the hot search path): pseudo-legal generation
+        # never applies a move, so the piece list cannot be reordered underneath us.
         for piece in pieceList:
             moves += self.get_pseudo_legal_moves_by_piece(piece)
         return moves
@@ -500,7 +673,16 @@ class Board:
         self.eg = move._eg
 
         self.eval -= move._temp_eval_delta
-        self.position_counts[self.position_key()] -= 1
+
+        # Drop keys that fall back to zero. defaultdict(int) still reads them as 0, but
+        # leaving them in place grows the dict by one entry per search node (~9.5k for a
+        # single depth-4 search) and it lives on the Board, so no TT clear would reclaim it.
+        k = self.position_key()
+        c = self.position_counts[k] - 1
+        if c:
+            self.position_counts[k] = c
+        else:
+            self.position_counts.pop(k, None)
 
         # restore turn
         self.turn = move._temp_turn
@@ -658,15 +840,17 @@ class Board:
     def _remove_piece_from_list(self, piece):
         if piece is None:
             return
+        # These diagnostics go to stderr: stdout is the UCI channel and any stray line
+        # there would corrupt the protocol.
         if piece.colour:
             if piece not in self.whitePieces:
-                print("REMOVE FAIL:", piece.name, piece.pos, "white")
-                print("whitePieces has:", [(p.name, p.pos) for p in self.whitePieces])
+                print("REMOVE FAIL:", piece.name, piece.pos, "white", file=sys.stderr)
+                print("whitePieces has:", [(p.name, p.pos) for p in self.whitePieces], file=sys.stderr)
                 raise ValueError("Piece not in whitePieces")
             self.whitePieces.remove(piece)
         else:
             if piece not in self.blackPieces:
-                print("REMOVE FAIL:", piece.name, piece.pos, "black")
+                print("REMOVE FAIL:", piece.name, piece.pos, "black", file=sys.stderr)
                 raise ValueError("Piece not in blackPieces")
             self.blackPieces.remove(piece)
 
@@ -688,11 +872,12 @@ class Board:
         if self.position_counts[self.position_key()] >= 3:
             return 4
 
-        if self.moveRuleTurns >= 50:
+        if self.moveRuleTurns >= HALFMOVE_DRAW_PLIES:
             return 3
 
         if moves is None:
-            for piece in pieces:
+            # Snapshot for the same reason as generate_legal_moves()
+            for piece in list(pieces):
                 if len(self.get_legal_moves_by_piece(piece)) != 0:
                     return 0
         else:
@@ -725,16 +910,9 @@ class Board:
 
         append("1" if self.turn % 2 == 0 else "0")
 
-        rooks = [self.boardList[7][0], self.boardList[7][7], self.boardList[0][0], self.boardList[0][7]]
-        for rook in rooks:
-            if rook and rook.name == "rook":
-                king = self.whiteKing if rook.colour else self.blackKing
-                if (not rook.hasMoved) and (not king.hasMoved):
-                    append("1")
-                else:
-                    append("0")
-            else:
-                append("0")
+        # Shared with to_fen() so the hash and the FEN can never disagree about rights
+        for ok in self._castling_rights():
+            append("1" if ok else "0")
 
         if self.enPassantTarget:
             x, y = self.enPassantTarget
