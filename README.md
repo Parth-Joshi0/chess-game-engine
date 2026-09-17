@@ -66,12 +66,12 @@ At 4-6 ply search depth with ~10-25 kN/s throughput, the engine achieves this st
 ### Architecture
 - **Incremental updates**: Board evaluation updated during make/unmake for efficiency
 - **Reversible moves**: Complete state preservation for exact position restoration
-- **Position hashing**: Binary position keys for repetition detection
+- **Position hashing**: Incremental Zobrist hashing, updated during make/unmake, for the transposition table and repetition detection
 - **Game phase calculation**: Dynamic middlegame/endgame weights based on material
 
 ### Performance
 - **Typical search depth**: 4-6 ply in middlegame positions (depth-limited mode)
-- **Node throughput**: ~9-25 kN/s depending on position complexity
+- **Node throughput**: ~10-25 kN/s depending on position complexity
 - **Optimization techniques**: 
   - Pseudo-legal generation with late check validation
   - Move ordering for better alpha-beta cutoffs
@@ -207,9 +207,6 @@ python selfplay.py --games 4    # full games under a clock, validating every mov
   evaluation was computed partly at older weights. A position loaded from FEN is scored
   fresh and can therefore differ slightly (measured worst case ~42 cp) from the same
   position reached by playing moves. The fresh value is the more correct of the two.
-- **Position keys are not Zobrist hashes.** `position_key()` builds a bitstring, which is
-  correct but slow — it is called several times per node and is the single largest
-  contributor to the engine's ~6 kN/s throughput in UCI mode.
 - **No opening book or tablebases**, so early moves are searched from scratch.
 
 ## What I Learned
@@ -226,7 +223,6 @@ While this project is feature-complete for my learning goals, possible extension
 - Endgame tablebase support
 - Bitboard representation for performance
 - Advanced evaluation (passed pawns, king tropism, mobility improvements)
-- Zobrist hashing to replace the bitstring position key (the biggest available speedup)
 - Transposition-table move ordering (the stored best move is already being recorded)
 - Parallel search (lazy SMP)
 
